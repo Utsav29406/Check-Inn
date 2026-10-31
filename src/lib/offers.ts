@@ -162,11 +162,15 @@ export async function bestCoupon(
   return null;
 }
 
-/** Adds the scratch card a confirmed booking by a signed-in guest earns (once). */
-export async function awardScratchCard(client: PoolClient, bookingCode: string) {
+/**
+ * Adds the scratch card a booking earns (once): only when a signed-in guest's booking fee has actually been paid, i.e.
+ * they came and paid at the restaurant (admin "Fee received") or their UPI payment was verified. Bookings that cost
+ * nothing, or that are never honoured, earn no card, so cards can't be farmed with bookings that are then skipped.
+ */
+export async function awardScratchCard(client: Pool | PoolClient, bookingCode: string) {
   await client.query(
     `INSERT INTO scratch_cards (user_id, booking_id)
-     SELECT user_id, id FROM bookings WHERE code = $1 AND user_id IS NOT NULL AND status = 'confirmed'
+     SELECT user_id, id FROM bookings WHERE code = $1 AND user_id IS NOT NULL AND status = 'confirmed' AND payment_status = 'paid'
      ON CONFLICT (booking_id) DO NOTHING`,
     [bookingCode],
   );
@@ -221,16 +225,19 @@ const CARD_SELECT = `
 
 const toView = (r: CardRow): ScratchCardView => ({ id: r.id, bookingCode: r.booking_code, restaurantName: r.restaurant_name, reveal: reveal(r), used: r.used });
 
+/** Cards from before the paid-only rule stay hidden until their booking is paid, unless already scratched. */
+const CARD_READY = "(b.payment_status = 'paid' OR s.prize IS NOT NULL)";
+
 /** A guest's cards, unscratched first. Cards for cancelled bookings are left out. */
 export async function getScratchCards(userId: number) {
-  const rows = await query<CardRow>(`${CARD_SELECT} WHERE s.user_id = $1 AND b.status <> 'cancelled' ORDER BY s.scratched_at IS NOT NULL, s.created_at DESC`, [
+  const rows = await query<CardRow>(`${CARD_SELECT} WHERE s.user_id = $1 AND b.status <> 'cancelled' AND ${CARD_READY} ORDER BY s.scratched_at IS NOT NULL, s.created_at DESC`, [
     userId,
   ]);
   return rows.map(toView);
 }
 
 export async function getBookingScratchCard(bookingCode: string, userId: number) {
-  const [row] = await query<CardRow>(`${CARD_SELECT} WHERE b.code = $1 AND s.user_id = $2 AND b.status = 'confirmed'`, [bookingCode, userId]);
+  const [row] = await query<CardRow>(`${CARD_SELECT} WHERE b.code = $1 AND s.user_id = $2 AND b.status = 'confirmed' AND ${CARD_READY}`, [bookingCode, userId]);
   return row ? toView(row) : null;
 }
 
@@ -239,12 +246,13 @@ export async function scratchCard(cardId: number, userId: number, festival: stri
   return transaction(async (client) => {
     const {
       rows: [card],
-    } = await client.query<{ id: number; prize: string | null; status: string }>(
-      `SELECT s.id, s.prize, b.status FROM scratch_cards s JOIN bookings b ON b.id = s.booking_id
+    } = await client.query<{ id: number; prize: string | null; status: string; payment_status: string }>(
+      `SELECT s.id, s.prize, b.status, b.payment_status FROM scratch_cards s JOIN bookings b ON b.id = s.booking_id
        WHERE s.id = $1 AND s.user_id = $2 FOR UPDATE OF s`,
       [cardId, userId],
     );
     if (!card || card.status === "cancelled") return null;
+    if (!card.prize && card.payment_status !== "paid") return null;
     if (!card.prize) {
       const prizes = prizeTable(festival);
       const prize = drawPrize(prizes);

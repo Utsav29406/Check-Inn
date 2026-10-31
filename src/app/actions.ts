@@ -10,9 +10,10 @@ import { query, transaction } from "@/lib/db";
 import { createSession, destroySession, getCurrentUser, safeNext, validBookingToken } from "@/lib/auth";
 import { HOLDS_SEAT, PAYMENT_HOLD_MINUTES, buildSlots } from "@/lib/restaurants";
 import { paymentMode, upiLink } from "@/lib/payments";
-import { sendBookingConfirmation } from "@/lib/email";
+import { sendBookingConfirmation, sendLockoutAlert, sendSignInAlert } from "@/lib/email";
+import { BOOKING_LIMIT, LOGIN_LIMIT, clearAttempts, clientIp, recentAttempts, recordAttempt, requestSummary } from "@/lib/limits";
 import { PLANS, memberExtraDiscount } from "@/lib/constants";
-import { awardScratchCard, bestCoupon, scratchCard } from "@/lib/offers";
+import { bestCoupon, scratchCard } from "@/lib/offers";
 import { getFestival, offerFestival } from "@/lib/festival";
 import { addDays, nowInIndia } from "@/lib/time";
 import type { Coupon, Restaurant, ScratchReveal } from "@/lib/types";
@@ -61,17 +62,28 @@ export async function signup(_: FormState, fd: FormData): Promise<FormState> {
 export async function login(_: FormState, fd: FormData): Promise<FormState> {
   const email = str(fd, "email").toLowerCase();
   const password = str(fd, "password");
-  const [user] = await query<{ id: number; password_hash: string | null }>(
-    "SELECT id, password_hash FROM users WHERE email = $1",
+  const ip = await clientIp();
+  const { perEmail, perIp, minutes } = LOGIN_LIMIT;
+  if ((await recentAttempts("login", email, minutes)) >= perEmail || (await recentAttempts("login-ip", ip, minutes)) >= perIp) {
+    return { error: `Too many wrong passwords. Please wait ${minutes} minutes and try again, or use Continue with Google.` };
+  }
+  const [user] = await query<{ id: number; name: string; password_hash: string | null }>(
+    "SELECT id, name, password_hash FROM users WHERE email = $1",
     [email],
   );
-  if (user && !user.password_hash) {
-    return { error: "This account uses Google sign-in. Use Continue with Google above." };
+  // One message for every failure, so the form doesn't reveal which emails have accounts.
+  if (!user?.password_hash || !(await bcrypt.compare(password, user.password_hash))) {
+    await Promise.all([recordAttempt("login", email), recordAttempt("login-ip", ip)]);
+    if (user && (await recentAttempts("login", email, minutes)) === perEmail) {
+      const req = await requestSummary();
+      after(() => sendLockoutAlert({ to: email, name: user.name, minutes, ...req }));
+    }
+    return { error: "Incorrect email or password. If you signed up with Google, use Continue with Google." };
   }
-  if (!user || !(await bcrypt.compare(password, user.password_hash!))) {
-    return { error: "Incorrect email or password." };
-  }
+  await clearAttempts("login", email);
   await createSession(user.id);
+  const req = await requestSummary();
+  after(() => sendSignInAlert({ to: email, name: user.name, method: "Email and password", ...req }));
   redirect(safeNext(str(fd, "next")));
 }
 
@@ -110,6 +122,29 @@ export async function createBooking(_: FormState, fd: FormData): Promise<FormSta
   if (!realDate || date < now.date || date > addDays(now.date, 30)) {
     return { error: "Please choose a date within the next 30 days." };
   }
+
+  // Limits against scripted bookings: per connection per hour, upcoming tables per phone, bookings per email per day.
+  const ip = await clientIp();
+  const { perIpHour, upcomingPerPhone, perEmailDay } = BOOKING_LIMIT;
+  if ((await recentAttempts("booking-ip", ip, 60)) >= perIpHour) {
+    return { error: "Too many bookings from this connection. Please try again in an hour." };
+  }
+  const [{ upcoming }] = await query<{ upcoming: number }>(
+    `SELECT count(*)::int AS upcoming FROM bookings
+     WHERE right(regexp_replace(guest_phone, '\\D', '', 'g'), 10) = $1 AND status IN ('confirmed', 'pending') AND booking_date >= $2`,
+    [phone.replace(/\D/g, "").slice(-10), now.date],
+  );
+  if (upcoming >= upcomingPerPhone) {
+    return { error: `This phone number already has ${upcoming} upcoming tables. Cancel one from My Bookings to book another.` };
+  }
+  if (email) {
+    const [{ today }] = await query<{ today: number }>(
+      "SELECT count(*)::int AS today FROM bookings WHERE lower(guest_email) = lower($1) AND created_at > now() - interval '1 day'",
+      [email],
+    );
+    if (today >= perEmailDay) return { error: "This email address has been used for too many bookings today. Please try again tomorrow." };
+  }
+  await recordAttempt("booking-ip", ip);
 
   const [user, festival] = await Promise.all([getCurrentUser(), getFestival()]);
   const mode = paymentMode();
@@ -178,7 +213,6 @@ export async function createBooking(_: FormState, fd: FormData): Promise<FormSta
           ],
         );
         if (row) {
-          if (!online) await awardScratchCard(client, row.code);
           return { code: row.code, amount, restaurant: restaurant.name, online };
         }
       }
@@ -236,7 +270,6 @@ export async function submitUtr(code: string, utr: string): Promise<FormState> {
       const fits = !closed && u.seats + b.guests <= r.capacity_per_slot;
       // Either way the UTR is kept, so an admin can match the payment (and refund it if the table was lost).
       await client.query("UPDATE bookings SET status = $2, payment_status = 'review', utr = $3 WHERE code = $1", [code, fits ? "confirmed" : "cancelled", clean]);
-      if (fits) await awardScratchCard(client, code);
       return fits ? "confirmed" : "full";
     });
   } catch (e) {
@@ -284,7 +317,7 @@ export async function scratchMyCard(cardId: number): Promise<{ reveal?: ScratchR
   const user = await getCurrentUser();
   if (!user) return { error: "Please sign in again." };
   const reveal = await scratchCard(cardId, user.id, offerFestival(await getFestival()));
-  if (!reveal) return { error: "This card isn't available any more (was its booking cancelled?)." };
+  if (!reveal) return { error: "This card isn't available yet: it unlocks once the booking fee is paid (or its booking was cancelled)." };
   revalidatePath("/offers");
   return { reveal };
 }

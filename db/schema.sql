@@ -165,3 +165,12 @@ CREATE TABLE IF NOT EXISTS site_settings (
   key   VARCHAR(40) PRIMARY KEY,
   value VARCHAR(200) NOT NULL
 );
+
+-- Recent sign-in failures and booking attempts, for rate limits (rows older than a day are cleared as new ones arrive).
+CREATE TABLE IF NOT EXISTS attempts (
+  id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  kind       VARCHAR(20) NOT NULL,
+  key        VARCHAR(200) NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_attempts_lookup ON attempts (kind, key, created_at);

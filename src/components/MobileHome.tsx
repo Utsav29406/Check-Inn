@@ -163,7 +163,7 @@ export function MobileHome({
         <Gift className="h-6 w-6 shrink-0 text-gold-600" />
         <span className="flex-1">
           <b>Offers &amp; scratch cards</b>
-          <span className="block text-muted">Offers taken off when you book, and a scratch card every time</span>
+          <span className="block text-muted">Offers taken off when you book, and a scratch card for every table you pay for</span>
         </span>
         <ChevronRight className="h-4 w-4 text-muted" />
       </Link>

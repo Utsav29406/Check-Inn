@@ -156,7 +156,7 @@ export default async function AdminOffers() {
               </Field>
               <div className="flex flex-col justify-center gap-2 text-sm">
                 <label className="flex items-center gap-2"><input type="checkbox" name="once_per_user" defaultChecked className="h-4 w-4 accent-brand-600" /> Once per guest</label>
-                <label className="flex items-center gap-2"><input type="checkbox" name="is_public" defaultChecked className="h-4 w-4 accent-brand-600" /> Show on the offers page</label>
+                <p className="text-xs text-muted">Shown on the offers page and applied automatically to bookings that qualify.</p>
               </div>
             </ActionForm>
           </div>

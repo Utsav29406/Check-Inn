@@ -15,7 +15,7 @@ export const metadata = { title: "Offers & scratch cards | CheckInn" };
 const STEPS = [
   { icon: CalendarCheck, title: "Book a table", text: "Pick a restaurant, a time and your party size." },
   { icon: BadgePercent, title: "Save automatically", text: "No codes to type: the best offer you qualify for comes off the booking fee." },
-  { icon: Gift, title: "Scratch and win", text: `Every table you book while signed in earns a scratch card. Wins last ${SCRATCH_VALID_DAYS} days.` },
+  { icon: Gift, title: "Scratch and win", text: `Book while signed in and pay the booking fee at the restaurant: your scratch card unlocks. Wins last ${SCRATCH_VALID_DAYS} days.` },
 ];
 
 export default async function OffersPage() {
@@ -57,7 +57,7 @@ export default async function OffersPage() {
           <>
             <p className="text-xs font-semibold uppercase tracking-widest text-gold-600">Offers &amp; rewards</p>
             <h1 className="mt-1 font-display text-3xl font-bold sm:text-4xl">Save on every table</h1>
-            <p className="mt-2 max-w-xl text-muted">The best offer comes off automatically when you book, and every booking earns a scratch card.</p>
+            <p className="mt-2 max-w-xl text-muted">The best offer comes off automatically when you book, and every table you pay for earns a scratch card.</p>
           </>
         )}
 
@@ -84,7 +84,7 @@ export default async function OffersPage() {
             <div className="mt-4 flex flex-col items-start gap-4 rounded-2xl bg-[radial-gradient(120%_120%_at_100%_0%,#1d6650_0%,#061f19_60%)] p-6 text-white sm:flex-row sm:items-center">
               <Gift className="h-10 w-10 shrink-0 text-gold-400" />
               <div className="flex-1">
-                <p className="font-display text-xl font-bold">Every booking earns a scratch card</p>
+                <p className="font-display text-xl font-bold">Every table you pay for earns a scratch card</p>
                 <p className="mt-0.5 text-sm text-white/70">Sign in before you book to collect them. Win up to a free table booking.</p>
               </div>
               <Link href="/login?next=/offers" className="rounded-xl bg-gold-400 px-5 py-2.5 font-semibold text-brand-900 hover:bg-gold-300">
@@ -95,7 +95,7 @@ export default async function OffersPage() {
             <div className="mt-4 rounded-2xl border border-dashed border-black/15 bg-white p-8 text-center">
               <Gift className="mx-auto h-10 w-10 text-gold-500" />
               <p className="mt-3 font-semibold">No scratch cards yet</p>
-              <p className="mt-1 text-sm text-muted">Book a table and you&rsquo;ll get one straight away.</p>
+              <p className="mt-1 text-sm text-muted">Book a table and pay the booking fee at the restaurant: your card appears here.</p>
               <Link href="/restaurants" className="mt-4 inline-block rounded-xl bg-brand-600 px-5 py-2.5 font-semibold text-white hover:bg-brand-700">
                 Find a table
               </Link>

@@ -270,3 +270,73 @@ function confirmationHtml(b: Booking, when: string, withInvoice: boolean, kind: 
 </body>
 </html>`;
 }
+
+/** A short branded account email: a heading, a sentence, a few label/value rows and a note. Never throws. */
+async function sendNotice(n: { to: string; name: string; subject: string; heading: string; intro: string; rows: [string, string][]; note: string }) {
+  if (!emailEnabled()) return;
+  const font = "Inter,'Segoe UI',Helvetica,Arial,sans-serif";
+  const rows = n.rows
+    .map(
+      ([k, v]) => `<tr>
+        <td width="110" valign="top" style="padding:7px 0;color:#646a66;font-family:${font};font-size:13px">${esc(k)}</td>
+        <td style="padding:7px 0;color:#121614;font-family:${font};font-size:15px;font-weight:600">${esc(v)}</td>
+      </tr>`,
+    )
+    .join("");
+  try {
+    await transport().sendMail({
+      from: { name: "CheckInn", address: process.env.GMAIL_USER! },
+      replyTo: process.env.GMAIL_USER!,
+      to: { name: n.name, address: n.to },
+      subject: n.subject,
+      text: [`Hi ${n.name.split(" ")[0]},`, "", n.intro, "", ...n.rows.map(([k, v]) => `${k}: ${v}`), "", n.note, "", "CheckInn"].join("\n"),
+      html: `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light"><title>${esc(n.heading)}</title></head>
+<body style="margin:0;padding:0;background:#efeadf">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#efeadf"><tr><td align="center" style="padding:24px 12px">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#ffffff" style="max-width:520px;background:#ffffff;border-radius:18px">
+      <tr><td bgcolor="#12493b" style="background:#12493b;padding:24px 28px;border-radius:18px 18px 0 0">
+        <p style="margin:0;color:#e9dcb8;font-family:${font};font-size:12px;letter-spacing:2px;text-transform:uppercase;font-weight:600">CheckInn</p>
+        <h1 style="margin:8px 0 0;color:#ffffff;font-family:Georgia,'Times New Roman',serif;font-size:24px;font-weight:700">${esc(n.heading)}</h1>
+      </td></tr>
+      <tr><td style="padding:22px 28px 8px;color:#121614;font-family:${font};font-size:15px;line-height:22px">Hi ${esc(n.name.split(" ")[0])},<br><br>${esc(n.intro)}</td></tr>
+      <tr><td style="padding:4px 28px 8px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${rows}</table></td></tr>
+      <tr><td style="padding:8px 28px 26px;color:#646a66;font-family:${font};font-size:13px;line-height:20px">${esc(n.note)}</td></tr>
+    </table>
+  </td></tr></table>
+</body></html>`,
+    });
+  } catch (e) {
+    console.error(`Account email to ${n.to} failed:`, e);
+  }
+}
+
+const whenNow = () => new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" });
+
+/** Tells someone their CheckInn account (or the admin panel) was just signed in to. */
+export function sendSignInAlert(a: { to: string; name: string; admin?: boolean; method: string; device: string; place: string; ip: string }) {
+  const what = a.admin ? "the CheckInn admin panel" : "your CheckInn account";
+  return sendNotice({
+    to: a.to,
+    name: a.name,
+    subject: a.admin ? "New sign-in to the CheckInn admin panel" : "New sign-in to your CheckInn account",
+    heading: "New sign-in",
+    intro: `Someone just signed in to ${what}.`,
+    rows: [["When", `${whenNow()} (India time)`], ["How", a.method], ["Device", a.device], ["Where", `${a.place} (approximate)`], ["IP address", a.ip]],
+    note: a.admin
+      ? "If this was you, there's nothing to do. If not, change this admin's password straight away in Admin → Users."
+      : "If this was you, there's nothing to do. If not, change your password or sign in with Google, and reply to this email so we can help.",
+  });
+}
+
+/** Tells the account owner that sign-in was paused after repeated wrong passwords. */
+export function sendLockoutAlert(a: { to: string; name: string; admin?: boolean; minutes: number; device: string; place: string; ip: string }) {
+  return sendNotice({
+    to: a.to,
+    name: a.name,
+    subject: a.admin ? "Admin sign-in paused after wrong passwords" : "Sign-in to your CheckInn account paused",
+    heading: "Too many wrong passwords",
+    intro: `There were several wrong passwords for ${a.admin ? "this admin account" : "your account"}, so we've paused password sign-in for ${a.minutes} minutes.`,
+    rows: [["When", `${whenNow()} (India time)`], ["Device", a.device], ["Where", `${a.place} (approximate)`], ["IP address", a.ip]],
+    note: "If this was you, wait a few minutes and try again. If not, someone may be guessing your password: consider changing it once you can sign in.",
+  });
+}

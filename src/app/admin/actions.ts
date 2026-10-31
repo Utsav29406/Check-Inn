@@ -4,12 +4,15 @@ import { timingSafeEqual } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { db, query } from "@/lib/db";
 import { adminCount, createAdminSession, destroyAdminSession, requireAdmin } from "@/lib/admin";
 import { buildSlots, getRestaurant } from "@/lib/restaurants";
 import { CITIES } from "@/lib/constants";
 import { nowInIndia } from "@/lib/time";
-import { emailEnabled, sendBookingReminder, sendTestConfirmation } from "@/lib/email";
+import { emailEnabled, sendBookingReminder, sendLockoutAlert, sendSignInAlert, sendTestConfirmation } from "@/lib/email";
+import { awardScratchCard } from "@/lib/offers";
+import { LOGIN_LIMIT, clearAttempts, clientIp, recentAttempts, recordAttempt, requestSummary } from "@/lib/limits";
 import type { FormState } from "@/app/actions";
 import type { Restaurant } from "@/lib/types";
 
@@ -24,11 +27,24 @@ const refresh = () => revalidatePath("/", "layout");
 
 export async function adminLogin(_: FormState, fd: FormData): Promise<FormState> {
   const email = str(fd, "email").toLowerCase();
-  const [admin] = await query<{ id: number; password_hash: string }>("SELECT id, password_hash FROM admins WHERE email = $1", [email]);
+  const ip = await clientIp();
+  const { perEmail, perIp, minutes } = LOGIN_LIMIT;
+  if ((await recentAttempts("admin-login", email, minutes)) >= perEmail || (await recentAttempts("admin-login-ip", ip, minutes)) >= perIp) {
+    return { error: `Too many wrong passwords. Please wait ${minutes} minutes and try again.` };
+  }
+  const [admin] = await query<{ id: number; name: string; password_hash: string }>("SELECT id, name, password_hash FROM admins WHERE email = $1", [email]);
   if (!admin || !(await bcrypt.compare(str(fd, "password"), admin.password_hash))) {
+    await Promise.all([recordAttempt("admin-login", email), recordAttempt("admin-login-ip", ip)]);
+    if (admin && (await recentAttempts("admin-login", email, minutes)) === perEmail) {
+      const req = await requestSummary();
+      after(() => sendLockoutAlert({ to: email, name: admin.name, admin: true, minutes, ...req }));
+    }
     return { error: "Incorrect email or password." };
   }
+  await clearAttempts("admin-login", email);
   await createAdminSession(admin.id);
+  const req = await requestSummary();
+  after(() => sendSignInAlert({ to: email, name: admin.name, admin: true, method: "Email and password", ...req }));
   redirect("/admin");
 }
 
@@ -127,7 +143,10 @@ export async function emailReminder(_: FormState, fd: FormData): Promise<FormSta
 /** The guest paid the booking fee at the restaurant. */
 export async function markFeePaid(fd: FormData) {
   await requireAdmin();
-  await query("UPDATE bookings SET payment_status = 'paid' WHERE code = $1 AND payment_status = 'due'", [str(fd, "code")]);
+  const code = str(fd, "code");
+  await query("UPDATE bookings SET payment_status = 'paid' WHERE code = $1 AND payment_status = 'due'", [code]);
+  // The guest came and paid: their scratch card unlocks.
+  await awardScratchCard(db(), code);
   refresh();
 }
 
@@ -143,6 +162,7 @@ export async function reviewPayment(fd: FormData) {
        WHERE code = $1 AND payment_status IN ('review', 'rejected')`,
       [code],
     );
+    await awardScratchCard(db(), code);
   } else {
     await query(
       "UPDATE bookings SET payment_status = 'rejected', status = 'cancelled' WHERE code = $1 AND payment_status IN ('review', 'paid') AND utr IS NOT NULL",
@@ -297,7 +317,7 @@ export async function sendTestEmail(_: FormState, fd: FormData): Promise<FormSta
 
 // ---------- Offers ----------
 
-/** Creates a coupon code. Public ones are listed on /offers; hidden ones work for anyone who has the code. */
+/** Creates an offer. Every offer is listed on /offers and applied automatically when a booking qualifies (guests never type codes). */
 export async function addCoupon(_: FormState, fd: FormData): Promise<FormState> {
   await requireAdmin();
   const code = str(fd, "code").toUpperCase();
@@ -324,7 +344,7 @@ export async function addCoupon(_: FormState, fd: FormData): Promise<FormState> 
     await query(
       `INSERT INTO coupons (code, title, kind, value, max_discount, min_guests, valid_until, max_uses, once_per_user, is_public)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-      [code, title, kind, value, kind === "percent" ? maxDiscount : null, minGuests, validUntil || null, maxUses, fd.get("once_per_user") === "on", fd.get("is_public") === "on"],
+      [code, title, kind, value, kind === "percent" ? maxDiscount : null, minGuests, validUntil || null, maxUses, fd.get("once_per_user") === "on", true],
     );
   } catch (e) {
     if ((e as { code?: string }).code === "23505") return { error: `${code} already exists. Pick another code.` };

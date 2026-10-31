@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CalendarDays, Clock, MapPin, Users, BadgePercent, CircleCheck, CircleX, Ticket } from "lucide-react";
+import { CalendarDays, Clock, MapPin, Users, BadgePercent, CircleCheck, CircleX, Ticket, Gift } from "lucide-react";
 import { getBooking } from "@/lib/bookings";
 import { getCurrentUser, validBookingToken } from "@/lib/auth";
 import { fmtDate, fmtTime } from "@/lib/time";
@@ -93,6 +93,16 @@ export default async function BookingPage({
           )}
         </div>
       </div>
+
+      {!card && user && b.user_id === user.id && !cancelled && b.amount > 0 && b.payment_status === "due" && (
+        <section className="mt-6 flex items-center gap-4 rounded-3xl border border-dashed border-gold-400/70 bg-white p-5 text-sm">
+          <Gift className="h-9 w-9 shrink-0 text-gold-500" />
+          <p>
+            <b className="block font-display text-lg">A scratch card is waiting for you</b>
+            <span className="text-muted">Pay the booking fee at the restaurant and it unlocks here. Win up to a free table booking.</span>
+          </p>
+        </section>
+      )}
 
       {card && (
         <section className="mt-6 rounded-3xl bg-white p-6 text-center shadow-sm ring-1 ring-black/5 sm:p-8">
