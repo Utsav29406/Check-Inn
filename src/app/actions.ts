@@ -10,7 +10,7 @@ import { query, transaction } from "@/lib/db";
 import { createSession, destroySession, getCurrentUser, safeNext, validBookingToken } from "@/lib/auth";
 import { HOLDS_SEAT, PAYMENT_HOLD_MINUTES, buildSlots } from "@/lib/restaurants";
 import { paymentMode, upiLink } from "@/lib/payments";
-import { sendBookingConfirmation, sendLockoutAlert, sendSignInAlert } from "@/lib/email";
+import { sendBookingConfirmation, sendCancellationEmails, sendLockoutAlert, sendSignInAlert } from "@/lib/email";
 import { BOOKING_LIMIT, LOGIN_LIMIT, clearAttempts, clientIp, recentAttempts, recordAttempt, requestSummary } from "@/lib/limits";
 import { PLANS, memberExtraDiscount } from "@/lib/constants";
 import { bestCoupon, scratchCard } from "@/lib/offers";
@@ -298,13 +298,15 @@ export async function cancelBooking(fd: FormData) {
   if (!user && !viaEmail) redirect(`/login?next=/bookings/${code}`);
   // Same rule as canCancel(): only before the table's time, and not once the fee has been paid.
   const now = nowInIndia();
-  await query(
+  const cancelled = await query(
     `UPDATE bookings SET status = 'cancelled'
      WHERE code = $1 AND status = 'confirmed' AND payment_status <> 'paid'
        AND (booking_date > $2 OR (booking_date = $2 AND slot_time > make_time($5, $6, 0)))
-       AND ($3::boolean OR user_id = $4)`,
+       AND ($3::boolean OR user_id = $4)
+     RETURNING code`,
     [code, now.date, viaEmail, user?.id ?? null, Math.floor(now.minutes / 60), now.minutes % 60],
   );
+  if (cancelled.length) after(() => sendCancellationEmails(code, "guest"));
   revalidatePath("/bookings");
   revalidatePath(`/bookings/${code}`);
 }

@@ -10,7 +10,7 @@ import { adminCount, createAdminSession, destroyAdminSession, requireAdmin } fro
 import { buildSlots, getRestaurant } from "@/lib/restaurants";
 import { CITIES } from "@/lib/constants";
 import { nowInIndia } from "@/lib/time";
-import { emailEnabled, sendBookingReminder, sendLockoutAlert, sendSignInAlert, sendTestConfirmation } from "@/lib/email";
+import { emailEnabled, sendBookingReminder, sendCancellationEmails, sendLockoutAlert, sendSignInAlert, sendTestConfirmation } from "@/lib/email";
 import { awardScratchCard } from "@/lib/offers";
 import { LOGIN_LIMIT, clearAttempts, clientIp, recentAttempts, recordAttempt, requestSummary } from "@/lib/limits";
 import type { FormState } from "@/app/actions";
@@ -127,7 +127,11 @@ export async function removeAdmin(fd: FormData) {
 
 export async function adminCancelBooking(fd: FormData) {
   await requireAdmin();
-  await query("UPDATE bookings SET status = 'cancelled' WHERE code = $1 AND status IN ('confirmed', 'pending')", [str(fd, "code")]);
+  const code = str(fd, "code");
+  const cancelled = await query("UPDATE bookings SET status = 'cancelled' WHERE code = $1 AND status = 'confirmed' RETURNING code", [code]);
+  // An unpaid UPI hold (pending) never reserved a table, so it's released without telling the guest.
+  if (!cancelled.length) await query("UPDATE bookings SET status = 'cancelled' WHERE code = $1 AND status = 'pending'", [code]);
+  else after(() => sendCancellationEmails(code, "admin"));
   refresh();
 }
 

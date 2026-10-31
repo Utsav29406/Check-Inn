@@ -272,7 +272,17 @@ function confirmationHtml(b: Booking, when: string, withInvoice: boolean, kind: 
 }
 
 /** A short branded account email: a heading, a sentence, a few label/value rows and a note. Never throws. */
-async function sendNotice(n: { to: string; name: string; subject: string; heading: string; intro: string; rows: [string, string][]; note: string }) {
+async function sendNotice(n: {
+  to: string;
+  name: string;
+  subject: string;
+  heading: string;
+  intro: string;
+  rows: [string, string][];
+  note: string;
+  /** An optional button under the details. */
+  link?: { href: string; label: string };
+}) {
   if (!emailEnabled()) return;
   const font = "Inter,'Segoe UI',Helvetica,Arial,sans-serif";
   const rows = n.rows
@@ -289,7 +299,7 @@ async function sendNotice(n: { to: string; name: string; subject: string; headin
       replyTo: process.env.GMAIL_USER!,
       to: { name: n.name, address: n.to },
       subject: n.subject,
-      text: [`Hi ${n.name.split(" ")[0]},`, "", n.intro, "", ...n.rows.map(([k, v]) => `${k}: ${v}`), "", n.note, "", "CheckInn"].join("\n"),
+      text: [`Hi ${n.name.split(" ")[0]},`, "", n.intro, "", ...n.rows.map(([k, v]) => `${k}: ${v}`), "", ...(n.link ? [`${n.link.label}: ${n.link.href}`, ""] : []), n.note, "", "CheckInn"].join("\n"),
       html: `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light"><title>${esc(n.heading)}</title></head>
 <body style="margin:0;padding:0;background:#efeadf">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#efeadf"><tr><td align="center" style="padding:24px 12px">
@@ -300,6 +310,11 @@ async function sendNotice(n: { to: string; name: string; subject: string; headin
       </td></tr>
       <tr><td style="padding:22px 28px 8px;color:#121614;font-family:${font};font-size:15px;line-height:22px">Hi ${esc(n.name.split(" ")[0])},<br><br>${esc(n.intro)}</td></tr>
       <tr><td style="padding:4px 28px 8px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${rows}</table></td></tr>
+      ${
+        n.link
+          ? `<tr><td style="padding:10px 28px 4px"><table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td bgcolor="#12493b" style="border-radius:10px"><a href="${esc(n.link.href)}" target="_blank" style="display:inline-block;padding:12px 18px;font-family:${font};font-size:14px;font-weight:600;text-decoration:none;color:#ffffff">${esc(n.link.label)}</a></td></tr></table></td></tr>`
+          : ""
+      }
       <tr><td style="padding:8px 28px 26px;color:#646a66;font-family:${font};font-size:13px;line-height:20px">${esc(n.note)}</td></tr>
     </table>
   </td></tr></table>
@@ -339,4 +354,64 @@ export function sendLockoutAlert(a: { to: string; name: string; admin?: boolean;
     rows: [["When", `${whenNow()} (India time)`], ["Device", a.device], ["Where", `${a.place} (approximate)`], ["IP address", a.ip]],
     note: "If this was you, wait a few minutes and try again. If not, someone may be guessing your password: consider changing it once you can sign in.",
   });
+}
+
+/**
+ * After a booking is cancelled: the guest is told (if they left an email), and when the guest cancelled it themselves,
+ * every admin is told too, so the freed table can be filled. Never throws.
+ */
+export async function sendCancellationEmails(code: string, by: "guest" | "admin") {
+  if (!emailEnabled()) return;
+  try {
+    const b = await getBooking(code);
+    if (!b || b.status !== "cancelled") return;
+    const when = `${fmtDate(b.booking_date, { weekday: "long", day: "numeric", month: "long" })}, ${fmtTime(b.slot_time)}`;
+    const rows: [string, string][] = [
+      ["Restaurant", `${b.restaurant_name}, ${b.restaurant_area}`],
+      ["When", when],
+      ["Guests", String(b.guests)],
+      ["Booking code", b.code],
+    ];
+    const jobs: Promise<void>[] = [];
+    if (b.guest_email) {
+      jobs.push(
+        sendNotice({
+          to: b.guest_email,
+          name: b.guest_name,
+          subject: `Booking cancelled: ${b.restaurant_name}, ${fmtDate(b.booking_date)} at ${fmtTime(b.slot_time)}`,
+          heading: "Your booking is cancelled",
+          intro:
+            by === "admin"
+              ? `We've had to cancel your table at ${b.restaurant_name}. We're sorry for the change of plans.`
+              : `Your table at ${b.restaurant_name} has been cancelled, as you asked.`,
+          rows,
+          link: { href: `${siteUrl()}/restaurants`, label: "Book another table" },
+          note:
+            by === "admin"
+              ? "Questions about this? Just reply to this email."
+              : "Didn't cancel this yourself? Reply to this email straight away and we'll help.",
+        }),
+      );
+    }
+    if (by === "guest") {
+      const admins = await query<{ name: string; email: string }>("SELECT name, email FROM admins");
+      for (const a of admins) {
+        jobs.push(
+          sendNotice({
+            to: a.email,
+            name: a.name,
+            subject: `Cancelled: ${b.restaurant_name}, ${fmtDate(b.booking_date)} at ${fmtTime(b.slot_time)} (${b.guests} guests)`,
+            heading: "A booking was cancelled",
+            intro: `${b.guest_name} cancelled their table, so ${b.guests} ${b.guests === 1 ? "seat is" : "seats are"} free again.`,
+            rows: [...rows, ["Guest", `${b.guest_name} · ${b.guest_phone}`], ...(b.coupon_code ? ([["Offer freed", b.coupon_code]] as [string, string][]) : [])],
+            link: { href: `${siteUrl()}/admin/bookings?q=${b.code}&status=all`, label: "View in admin" },
+            note: "You're getting this because you're a CheckInn admin.",
+          }),
+        );
+      }
+    }
+    await Promise.all(jobs);
+  } catch (e) {
+    console.error(`Cancellation emails for ${code} failed:`, e);
+  }
 }
