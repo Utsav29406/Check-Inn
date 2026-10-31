@@ -1,0 +1,232 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-playfair), Georgia, serif;
+}
+
+@theme {
+  /* Emerald & champagne */
+  --color-cream: #faf8f3;
+  --color-sand: #efeadf;
+  --color-ink: #121614;
+  --color-muted: #646a66;
+  --color-brand-50: #edf4f1;
+  --color-brand-100: #d3e4dd;
+  --color-brand-500: #1d6650;
+  --color-brand-600: #12493b;
+  --color-brand-700: #0b372c;
+  --color-brand-900: #061f19;
+  --color-gold-300: #e9dcb8;
+  --color-gold-400: #d6bf8a;
+  --color-gold-500: #bb9d5e;
+  --color-gold-600: #957a42;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+  background: var(--color-cream);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--color-gold-300);
+  color: var(--color-ink);
+}
+
+/* ---------- Animated logo ---------- */
+.logo-lid {
+  transform-box: fill-box;
+  transform-origin: 0% 100%;
+  animation: logo-lid 5s ease-in-out infinite;
+}
+.logo-steam path {
+  opacity: 0;
+  animation: logo-steam 2.6s ease-out infinite;
+}
+.logo-steam path:nth-child(2) { animation-delay: 0.5s; }
+.logo-steam path:nth-child(3) { animation-delay: 1s; }
+.logo-check {
+  stroke-dasharray: 24;
+  stroke-dashoffset: 24;
+  animation: logo-check 5s ease-in-out infinite;
+}
+.logo-mark:hover .logo-lid { animation-duration: 1.2s; }
+
+@keyframes logo-lid {
+  0%, 55%, 100% { transform: translateY(0) rotate(0deg); }
+  65%, 85% { transform: translate(-1px, -8px) rotate(-18deg); }
+}
+@keyframes logo-steam {
+  0% { opacity: 0; transform: translateY(3px); }
+  35% { opacity: 0.9; }
+  100% { opacity: 0; transform: translateY(-7px); }
+}
+@keyframes logo-check {
+  0%, 60% { stroke-dashoffset: 24; }
+  72%, 92% { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: 24; }
+}
+
+/* ---------- Scroll reveal ---------- */
+.reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.7s ease, transform 0.7s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.reveal.in-view {
+  opacity: 1;
+  transform: none;
+}
+
+/* ---------- Misc ---------- */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+.animate-float { animation: float 6s ease-in-out infinite; }
+
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.animate-marquee { animation: marquee 40s linear infinite; }
+
+@keyframes ken-burns {
+  from { transform: scale(1.05); }
+  to { transform: scale(1.15); }
+}
+.animate-ken-burns { animation: ken-burns 20s ease-in-out infinite alternate; }
+
+.text-gradient-gold {
+  background: linear-gradient(100deg, var(--color-gold-300), var(--color-gold-500) 50%, var(--color-gold-300));
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 6s linear infinite;
+}
+@keyframes shimmer {
+  to { background-position: 200% center; }
+}
+
+/* ---------- Diwali theme ---------- */
+@keyframes diya-flicker {
+  0%, 100% { transform: scale(1, 1) skewX(0deg); }
+  25% { transform: scale(0.94, 1.07) skewX(2deg); }
+  50% { transform: scale(1.04, 0.95) skewX(-2deg); }
+  75% { transform: scale(0.97, 1.04) skewX(1deg); }
+}
+.diya-flame {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: diya-flicker 1.7s ease-in-out infinite;
+}
+@keyframes twinkle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+.twinkle { animation: twinkle 2.4s ease-in-out infinite; }
+@keyframes sparkle {
+  0%, 100% { transform: scale(0.4) rotate(0deg); opacity: 0.2; }
+  50% { transform: scale(1) rotate(45deg); opacity: 1; }
+}
+.sparkle { transform-box: fill-box; transform-origin: center; animation: sparkle 3.2s ease-in-out infinite; }
+@keyframes spin-slow { to { transform: rotate(360deg); } }
+.animate-spin-slow { animation: spin-slow 180s linear infinite; }
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { scrollbar-width: none; }
+
+/* ---------- Opening animation (once per visit, see OpeningAnimation.tsx) ----------
+   Only transform and opacity animate, on HTML boxes (each logo piece is its own <svg>), so the compositor runs it all:
+   nothing re-lays out, and it doesn't freeze while the page's scripts load. */
+.opening {
+  position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; overflow: hidden; cursor: pointer;
+  background: radial-gradient(110% 80% at 50% 45%, #0b3a2e 0%, var(--color-brand-900) 70%);
+  animation: opening-reveal 0.6s cubic-bezier(0.55, 0, 0.75, 0.2) 1.45s both;
+}
+html[data-opening="off"] .opening { display: none; }
+/* Dark from the very first paint, so the cream page never blinks before the cover; cream again under the cover's fade. */
+html[data-opening="on"] body { animation: opening-ground 1.45s steps(1, end) both; }
+@keyframes opening-ground { from { background-color: var(--color-brand-900); } }
+.opening-skip { animation: opening-reveal 0.25s ease-out both; }
+.opening-mark, .opening-text { display: grid; justify-items: center; gap: 14px; }
+/* The logo and the name leave just before the ring sweeps out from the logo's centre. */
+.opening-logo, .opening-text { animation: opening-out 0.3s ease-in 1.2s both; }
+.opening-logo, .opening-text, .opening-logo > svg, .opening-word, .opening-tag, .opening-burst { will-change: transform, opacity; }
+.opening-logo-wrap, .opening-logo { position: relative; width: 76px; height: 76px; }
+.opening-logo > svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.opening-ring circle { fill: none; stroke: var(--color-gold-400); stroke-width: 1.6; }
+.opening-ring { animation: opening-ring 0.7s cubic-bezier(0.2, 0.8, 0.25, 1) 0.05s both; }
+.opening-dome path { fill: var(--color-gold-400); opacity: 0.4; }
+.opening-dome circle { fill: #e9dcb8; }
+.opening-dome { animation: opening-drop 0.45s cubic-bezier(0.2, 0.8, 0.3, 1) 0.4s both; }
+.opening-check path { fill: none; stroke: #e9dcb8; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+.opening-check { transform-origin: 50% 57%; animation: opening-tick 0.4s cubic-bezier(0.3, 1.5, 0.5, 1) 0.65s both; }
+.opening-plate rect { fill: #e9dcb8; }
+.opening-plate { animation: opening-grow 0.45s cubic-bezier(0.2, 0.8, 0.3, 1) 0.3s both; }
+.opening-word {
+  margin: 0; font-size: 2.4rem; font-weight: 700; line-height: 1; color: #fff;
+  animation: opening-settle 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) 0.5s both;
+}
+.opening-word span { font-style: italic; color: var(--color-gold-400); }
+.opening-tag {
+  margin: 0; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.26em; text-transform: uppercase; color: #e9dcb8;
+  animation: opening-fade-in 0.5s ease-out 0.8s both;
+}
+/* The ring that sweeps out: drawn at full size and scaled up from the logo's size, so it stays crisp. */
+.opening-burst {
+  position: absolute; left: 50%; top: 50%; width: 220vmax; height: 220vmax; margin: -110vmax 0 0 -110vmax;
+  border-radius: 50%; border: 1.6vmax solid var(--color-gold-400); opacity: 0;
+  animation: opening-burst 0.75s cubic-bezier(0.3, 0, 0.2, 1) 1.25s both;
+}
+@media (min-width: 768px) {
+  .opening-logo-wrap, .opening-logo { width: 92px; height: 92px; }
+  .opening-word { font-size: 3.25rem; }
+  .opening-tag { font-size: 0.8rem; }
+}
+@keyframes opening-ring { from { opacity: 0; transform: scale(0.55) rotate(-140deg); } }
+@keyframes opening-drop { from { opacity: 0; transform: translateY(-14%); } }
+@keyframes opening-tick { from { opacity: 0; transform: scale(0.4); } }
+@keyframes opening-grow { from { opacity: 0; transform: scaleX(0.2); } }
+@keyframes opening-settle { from { opacity: 0; transform: translateY(10px) scale(0.97); } }
+@keyframes opening-fade-in { from { opacity: 0; } }
+@keyframes opening-out { to { opacity: 0; transform: scale(0.92); } }
+@keyframes opening-burst {
+  0% { opacity: 0; transform: scale(0.035); }
+  6% { opacity: 1; }
+  70% { opacity: 0.85; }
+  100% { opacity: 0; transform: scale(1); }
+}
+@keyframes opening-reveal { to { opacity: 0; visibility: hidden; pointer-events: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+  .reveal { opacity: 1; transform: none; }
+  .logo-check { stroke-dashoffset: 0; }
+  .opening { display: none; }
+}
+
+/* ---------- Sign in / sign up entrance ---------- */
+.auth-pane[data-enter] .auth-f {
+  animation: auth-in-side 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation-delay: calc(var(--i) * 70ms + var(--base, 80ms));
+}
+.auth-signup[data-enter] .auth-f { animation-name: auth-in-rise; animation-duration: 0.7s; }
+@keyframes auth-in-side {
+  from { opacity: 0; transform: translateX(28px); }
+}
+@keyframes auth-in-rise {
+  from { opacity: 0; transform: translateY(18px); filter: blur(6px); }
+}
