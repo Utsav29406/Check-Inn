@@ -1,5 +1,5 @@
 import { TrendingUp, Users, LayoutDashboard } from "lucide-react";
-import { PartnerForm } from "@/components/PartnerForm";
+import { ListingForm } from "@/components/ListingForm";
 import { Reveal } from "@/components/Reveal";
 
 export const metadata = { title: "Partner with us | CheckInn" };
@@ -12,14 +12,14 @@ const BENEFITS = [
 
 export default function PartnerPage() {
   return (
-    <div className="mx-auto grid max-w-7xl gap-14 px-4 py-16 sm:px-6 lg:grid-cols-2 lg:items-center">
-      <div>
+    <div className="mx-auto grid max-w-7xl gap-14 px-4 py-16 sm:px-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:items-start">
+      <div className="lg:sticky lg:top-24">
         <Reveal>
           <p className="text-sm font-semibold uppercase tracking-widest text-brand-600">For restaurants</p>
           <h1 className="mt-2 font-display text-4xl font-bold leading-tight sm:text-5xl">
             Grow your restaurant with <span className="italic text-brand-600">CheckInn</span>
           </h1>
-          <p className="mt-4 text-lg text-muted">Join India&apos;s premium dining club and turn empty tables into loyal regulars.</p>
+          <p className="mt-4 text-lg text-muted">List your restaurant in a few minutes. We check every listing, and once it&apos;s approved, guests can book your tables.</p>
         </Reveal>
         <div className="mt-10 space-y-6">
           {BENEFITS.map((b, i) => (
@@ -38,7 +38,7 @@ export default function PartnerPage() {
         </div>
       </div>
       <Reveal delay={150}>
-        <PartnerForm />
+        <ListingForm />
       </Reveal>
     </div>
   );

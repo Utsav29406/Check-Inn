@@ -6,6 +6,8 @@ import { query } from "@/lib/db";
 import { CITIES } from "@/lib/constants";
 import { ActionForm, Field, field } from "@/components/admin/ActionForm";
 import { PageHeader } from "@/components/admin/ui";
+import { LocationField } from "@/components/LocationField";
+import { PhotoPicker } from "@/components/PhotoPicker";
 import { saveRestaurant } from "../../../actions";
 import type { Restaurant } from "@/lib/types";
 
@@ -47,7 +49,17 @@ export default async function EditRestaurant({ params }: { params: Promise<{ id:
               <option value="nonveg">Non-veg (serves both)</option>
             </select>
           </Field>
-          <Field label="Photo link" hint="https:// link to an image"><input name="image_url" type="url" defaultValue={r.image_url} required className={field} /></Field>
+          <div className="sm:col-span-2">
+            <Field label="Location on the map" hint="Google Maps link or coordinates. Shown as a map on the restaurant page and used for directions.">
+              <LocationField name="location" defaultValue={r.latitude != null ? `${r.latitude}, ${r.longitude}` : ""} />
+            </Field>
+          </div>
+          <div className="space-y-3 sm:col-span-2">
+            <Field label="Photo" hint="Upload one, or paste an https:// link below. A new upload replaces the current photo.">
+              <PhotoPicker name="photo" current={r.image_url} />
+            </Field>
+            <Field label="…or photo link"><input name="image_url" type="text" defaultValue={r.image_url} placeholder="https://" className={field} /></Field>
+          </div>
           <div className="sm:col-span-2">
             <Field label="Description"><textarea name="description" defaultValue={r.description} rows={3} required className={field} /></Field>
           </div>

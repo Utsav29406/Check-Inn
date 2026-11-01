@@ -5,16 +5,17 @@ import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
-import { db, query } from "@/lib/db";
+import { db, query, transaction } from "@/lib/db";
 import { adminCount, createAdminSession, destroyAdminSession, requireAdmin } from "@/lib/admin";
 import { buildSlots, getRestaurant } from "@/lib/restaurants";
 import { CITIES } from "@/lib/constants";
 import { nowInIndia } from "@/lib/time";
-import { emailEnabled, sendBookingReminder, sendCancellationEmails, sendLockoutAlert, sendSignInAlert, sendTestConfirmation } from "@/lib/email";
+import { emailEnabled, sendBookingReminder, sendCancellationEmails, sendListingDecision, sendLockoutAlert, sendSignInAlert, sendTestConfirmation } from "@/lib/email";
 import { awardScratchCard } from "@/lib/offers";
 import { LOGIN_LIMIT, clearAttempts, clientIp, recentAttempts, recordAttempt, requestSummary } from "@/lib/limits";
 import type { FormState } from "@/app/actions";
-import type { Restaurant } from "@/lib/types";
+import type { Listing, Restaurant } from "@/lib/types";
+import { feeForPrice, parseLocation, savePhoto } from "@/lib/images";
 
 const str = (fd: FormData, key: string) => String(fd.get(key) ?? "").trim();
 const isEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
@@ -252,7 +253,17 @@ export async function saveRestaurant(_: FormState, fd: FormData): Promise<FormSt
 
   if (r.name.length < 2 || !r.area || !r.address || !r.cuisines || r.description.length < 10) return { error: "Please fill in the name, area, address, cuisines and description." };
   if (!(CITIES as readonly string[]).includes(r.city)) return { error: "Please choose a city." };
-  if (!/^https:\/\/\S+$/.test(r.image_url)) return { error: "The photo must be an https:// image link." };
+  // A new upload replaces the photo; otherwise keep the link (or an earlier upload, served from /api/images/).
+  const upload = str(fd, "photo");
+  if (upload) {
+    const saved = await savePhoto(upload);
+    if (!saved) return { error: "That photo couldn't be saved. Try a JPG or PNG under 1.5 MB." };
+    r.image_url = saved;
+  }
+  if (!/^(https:\/\/\S+|\/api\/images\/\d+)$/.test(r.image_url)) return { error: "Add a photo: upload one, or paste an https:// image link." };
+  const location = await parseLocation(str(fd, "location"));
+  if (location === "invalid") return { error: "We couldn't read that location. Paste a Google Maps share link or coordinates like 23.0396, 72.5660." };
+  Object.assign(r, { latitude: location?.latitude ?? null, longitude: location?.longitude ?? null });
   if (r.food_type !== "veg" && r.food_type !== "nonveg") return { error: "Choose pure veg or non-veg." };
   if (!isTime(r.opening_time) || !isTime(r.closing_time)) return { error: "Please set opening and closing times." };
   if (Boolean(r.break_start) !== Boolean(r.break_end) || (r.break_start && !(isTime(r.break_start) && isTime(r.break_end!)))) {
@@ -383,4 +394,45 @@ export async function setPartnerStatus(fd: FormData) {
   if (!["new", "contacted", "done"].includes(status)) return;
   await query("UPDATE partner_requests SET status = $1 WHERE id = $2", [status, Number(fd.get("id"))]);
   revalidatePath("/admin/users");
+}
+
+// ---------- Owner listings ----------
+
+/** Puts an owner's listing on the website as a new restaurant (they can be fine-tuned afterwards in Restaurants). */
+export async function approveListing(fd: FormData) {
+  await requireAdmin();
+  const id = Number(fd.get("id"));
+  const approved = await transaction(async (client) => {
+    const {
+      rows: [l],
+    } = await client.query<Listing>("SELECT * FROM listings WHERE id = $1 AND status = 'pending' FOR UPDATE", [id]);
+    if (!l) return false;
+    const base = `${slugify(l.name)}-${slugify(l.area)}`;
+    let slug = base;
+    for (let n = 2; (await client.query("SELECT 1 FROM restaurants WHERE slug = $1", [slug])).rowCount; n++) slug = `${base}-${n}`;
+    const {
+      rows: [r],
+    } = await client.query<{ id: number }>(
+      `INSERT INTO restaurants (slug, name, city, area, address, cuisines, price_for_two, rating, reviews_count, image_url, description, highlights,
+         opening_time, closing_time, capacity_per_slot, discount_percent, is_featured, food_type, booking_fee, latitude, longitude)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 4.0, 0, $8, $9, '', $10, $11, 40, 0, FALSE, $12, $13, $14, $15) RETURNING id`,
+      [slug, l.name, l.city, l.area, l.address, l.cuisines, l.price_for_two, l.image_url, l.description, l.opening_time, l.closing_time, l.food_type,
+       feeForPrice(l.price_for_two), l.latitude, l.longitude],
+    );
+    await client.query("UPDATE listings SET status = 'approved', restaurant_id = $2, reviewed_at = now() WHERE id = $1", [id, r.id]);
+    return true;
+  });
+  if (approved) after(() => sendListingDecision(id));
+  revalidatePath("/admin/listings");
+  refresh();
+}
+
+/** Turns down an owner's listing; the reason is emailed to them. */
+export async function rejectListing(fd: FormData) {
+  await requireAdmin();
+  const id = Number(fd.get("id"));
+  const reason = str(fd, "reason").slice(0, 300) || null;
+  const rows = await query("UPDATE listings SET status = 'rejected', reject_reason = $2, reviewed_at = now() WHERE id = $1 AND status = 'pending' RETURNING id", [id, reason]);
+  if (rows.length) after(() => sendListingDecision(id));
+  revalidatePath("/admin/listings");
 }

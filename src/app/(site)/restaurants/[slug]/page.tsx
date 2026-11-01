@@ -92,7 +92,7 @@ export default async function RestaurantPage({
               </Fact>
               <Fact icon={<MapPin className="h-3.5 w-3.5" />} label="Address" wide>
                 {r.address}
-                <a href={directionsUrl(r.name, r.address)} target="_blank" rel="noopener noreferrer" className="mt-1 block text-xs font-semibold text-brand-600">
+                <a href={directionsUrl(r.name, r.address, r.latitude, r.longitude)} target="_blank" rel="noopener noreferrer" className="mt-1 block text-xs font-semibold text-brand-600">
                   Get directions
                 </a>
               </Fact>
@@ -210,6 +210,26 @@ export default async function RestaurantPage({
             ))}
           </div>
           </div>
+
+          {r.latitude != null && r.longitude != null && (
+            <section>
+              <h2 className="mt-8 font-display text-xl font-bold md:mt-10 md:text-2xl">Location</h2>
+              <iframe
+                title={`Map showing ${r.name}`}
+                src={`https://maps.google.com/maps?q=${r.latitude},${r.longitude}&z=16&output=embed`}
+                loading="lazy"
+                className="mt-4 h-64 w-full rounded-2xl border border-black/5 md:h-80"
+              />
+              <p className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm">
+                <span className="flex min-w-0 items-center gap-1.5 text-muted">
+                  <MapPin className="h-4 w-4 shrink-0 text-brand-600" /> {r.address}
+                </span>
+                <a href={directionsUrl(r.name, r.address, r.latitude, r.longitude)} target="_blank" rel="noopener noreferrer" className="font-semibold text-brand-600">
+                  Get directions
+                </a>
+              </p>
+            </section>
+          )}
         </div>
 
         <aside className="lg:sticky lg:top-24 lg:self-start">

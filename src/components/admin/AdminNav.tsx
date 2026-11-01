@@ -2,20 +2,24 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CalendarClock, CalendarDays, IndianRupee, LayoutDashboard, Store, TicketPercent, Users } from "lucide-react";
+import { CalendarClock, CalendarDays, ClipboardCheck, IndianRupee, LayoutDashboard, Store, TicketPercent, Users } from "lucide-react";
 
 const ITEMS = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
   { href: "/admin/bookings", label: "Bookings", icon: CalendarDays },
   { href: "/admin/slots", label: "Slots", icon: CalendarClock },
   { href: "/admin/restaurants", label: "Restaurants", icon: Store },
+  { href: "/admin/listings", label: "Listings", icon: ClipboardCheck },
   { href: "/admin/offers", label: "Offers", icon: TicketPercent },
   { href: "/admin/users", label: "Users & partners", icon: Users },
   { href: "/admin/payments", label: "UPI payments", icon: IndianRupee },
 ];
 
-/** Sidebar from 768px up, a scrollable tab row on phones. "UPI payments" only shows while UPI QR payments are on. */
-export function AdminNav({ upi }: { upi: boolean }) {
+/**
+ * Sidebar from 768px up, a scrollable tab row on phones. "UPI payments" only shows while UPI QR payments are on;
+ * Listings shows how many restaurants are waiting for approval.
+ */
+export function AdminNav({ upi, pendingListings = 0 }: { upi: boolean; pendingListings?: number }) {
   const pathname = usePathname();
   const items = upi ? ITEMS : ITEMS.filter((i) => i.href !== "/admin/payments");
   const active = (href: string) => (href === "/admin" ? pathname === "/admin" : pathname.startsWith(href));
@@ -31,6 +35,9 @@ export function AdminNav({ upi }: { upi: boolean }) {
         >
           <Icon className={`h-4.5 w-4.5 ${active(href) ? "text-gold-300" : ""}`} />
           {label}
+          {href === "/admin/listings" && pendingListings > 0 && (
+            <span className="ml-auto rounded-full bg-gold-400 px-2 text-[11px] font-bold text-brand-900">{pendingListings}</span>
+          )}
         </Link>
       ))}
     </nav>

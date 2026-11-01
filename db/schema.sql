@@ -174,3 +174,42 @@ CREATE TABLE IF NOT EXISTS attempts (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_attempts_lookup ON attempts (kind, key, created_at);
+
+-- Photos uploaded from the listing form and the admin panel, served at /api/images/<id>.
+CREATE TABLE IF NOT EXISTS images (
+  id           BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  content_type VARCHAR(20) NOT NULL,
+  data         BYTEA NOT NULL,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Map pin for each restaurant (shown as a map on its page, and used for directions).
+ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS latitude NUMERIC(9, 6);
+ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS longitude NUMERIC(9, 6);
+
+-- Restaurants listed by their owners from /partner. They go on the website only when an admin approves them.
+CREATE TABLE IF NOT EXISTS listings (
+  id             BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  status         VARCHAR(10) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+  name           VARCHAR(140) NOT NULL,
+  city           VARCHAR(60) NOT NULL,
+  area           VARCHAR(100) NOT NULL,
+  address        VARCHAR(255) NOT NULL,
+  latitude       NUMERIC(9, 6),
+  longitude      NUMERIC(9, 6),
+  cuisines       VARCHAR(255) NOT NULL,
+  price_for_two  INT NOT NULL,
+  food_type      VARCHAR(6) NOT NULL,
+  opening_time   TIME NOT NULL,
+  closing_time   TIME NOT NULL,
+  description    TEXT NOT NULL,
+  image_url      VARCHAR(500) NOT NULL,
+  owner_name     VARCHAR(120) NOT NULL,
+  owner_phone    VARCHAR(20) NOT NULL,
+  owner_email    VARCHAR(190) NOT NULL,
+  restaurant_id  BIGINT REFERENCES restaurants(id) ON DELETE SET NULL,
+  reject_reason  VARCHAR(300),
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  reviewed_at    TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_listings_status ON listings (status, created_at);

@@ -10,9 +10,10 @@ import { query, transaction } from "@/lib/db";
 import { createSession, destroySession, getCurrentUser, safeNext, validBookingToken } from "@/lib/auth";
 import { HOLDS_SEAT, PAYMENT_HOLD_MINUTES, buildSlots } from "@/lib/restaurants";
 import { paymentMode, upiLink } from "@/lib/payments";
-import { sendBookingConfirmation, sendCancellationEmails, sendLockoutAlert, sendSignInAlert } from "@/lib/email";
+import { sendBookingConfirmation, sendCancellationEmails, sendListingReceived, sendLockoutAlert, sendSignInAlert } from "@/lib/email";
 import { BOOKING_LIMIT, LOGIN_LIMIT, clearAttempts, clientIp, recentAttempts, recordAttempt, requestSummary } from "@/lib/limits";
-import { PLANS, memberExtraDiscount } from "@/lib/constants";
+import { CITIES, PLANS, memberExtraDiscount } from "@/lib/constants";
+import { parseLocation, savePhoto } from "@/lib/images";
 import { bestCoupon, scratchCard } from "@/lib/offers";
 import { getFestival, offerFestival } from "@/lib/festival";
 import { addDays, nowInIndia } from "@/lib/time";
@@ -338,20 +339,57 @@ export async function joinMembership(fd: FormData) {
   redirect("/membership?joined=1");
 }
 
-export async function submitPartner(_: FormState, fd: FormData): Promise<FormState> {
-  const restaurantName = str(fd, "restaurantName");
-  const contactName = str(fd, "contactName");
-  const phone = str(fd, "phone");
-  const email = str(fd, "email");
-  const city = str(fd, "city");
-  const message = str(fd, "message").slice(0, 1000);
-  if (restaurantName.length < 2 || contactName.length < 2 || !city) return { error: "Please fill in all required fields." };
-  if (restaurantName.length > 140 || contactName.length > 120 || city.length > 60) return { error: "Please shorten the restaurant, contact or city name." };
-  if (!isPhone(phone)) return { error: "Please enter a valid phone number." };
-  if (!isEmail(email)) return { error: "Please enter a valid email address." };
-  await query(
-    "INSERT INTO partner_requests (restaurant_name, contact_name, phone, email, city, message) VALUES ($1, $2, $3, $4, $5, $6)",
-    [restaurantName, contactName, phone, email, city, message || null],
+/**
+ * A restaurant owner lists their restaurant from /partner. It waits in Admin → Listings and only goes on the website
+ * once an admin approves it.
+ */
+export async function submitListing(_: FormState, fd: FormData): Promise<FormState> {
+  const l = {
+    name: str(fd, "name"),
+    city: str(fd, "city"),
+    area: str(fd, "area"),
+    address: str(fd, "address"),
+    cuisines: str(fd, "cuisines"),
+    price_for_two: Number(str(fd, "price_for_two")),
+    food_type: str(fd, "food_type"),
+    opening_time: str(fd, "opening_time"),
+    closing_time: str(fd, "closing_time"),
+    description: str(fd, "description"),
+    owner_name: str(fd, "owner_name"),
+    owner_phone: str(fd, "owner_phone"),
+    owner_email: str(fd, "owner_email").toLowerCase(),
+  };
+  const isTime = (t: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(t);
+  if (l.name.length < 2 || l.name.length > 140) return { error: "Please enter the restaurant's name." };
+  if (!(CITIES as readonly string[]).includes(l.city)) return { error: "Please choose the city." };
+  if (l.area.length < 2 || l.area.length > 100) return { error: "Please enter the area, e.g. SG Highway." };
+  if (l.address.length < 8 || l.address.length > 255) return { error: "Please enter the full address." };
+  if (l.cuisines.length < 3 || l.cuisines.length > 255) return { error: "Please list the cuisines, e.g. Gujarati, Thali." };
+  if (!Number.isInteger(l.price_for_two) || l.price_for_two < 100 || l.price_for_two > 100000) return { error: "Price for two must be a whole number in rupees, from 100." };
+  if (l.food_type !== "veg" && l.food_type !== "nonveg") return { error: "Choose pure veg or non-veg." };
+  if (!isTime(l.opening_time) || !isTime(l.closing_time) || l.opening_time === l.closing_time) return { error: "Please set opening and closing times." };
+  if (l.description.length < 20 || l.description.length > 1500) return { error: "Please describe the restaurant in a few sentences (20 to 1,500 characters)." };
+  if (!isName(l.owner_name)) return { error: "Please enter your name." };
+  if (!isPhone(l.owner_phone)) return { error: "Please enter a valid phone number." };
+  if (!isEmail(l.owner_email)) return { error: "Please enter a valid email address." };
+
+  const ip = await clientIp();
+  if ((await recentAttempts("listing-ip", ip, 24 * 60)) >= 5) return { error: "Too many listings from this connection today. Please try again tomorrow." };
+
+  const location = await parseLocation(str(fd, "location"));
+  if (location === "invalid") return { error: "We couldn't read that location. Paste a Google Maps share link, or use your current location." };
+  if (!location) return { error: "Please add the restaurant's location on the map." };
+  const image_url = await savePhoto(str(fd, "photo"));
+  if (!image_url) return { error: "Please upload a photo of the restaurant (JPG, PNG or WebP)." };
+
+  await recordAttempt("listing-ip", ip);
+  const [row] = await query<{ id: number }>(
+    `INSERT INTO listings (name, city, area, address, latitude, longitude, cuisines, price_for_two, food_type, opening_time, closing_time,
+       description, image_url, owner_name, owner_phone, owner_email)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING id`,
+    [l.name, l.city, l.area, l.address, location.latitude, location.longitude, l.cuisines, l.price_for_two, l.food_type, l.opening_time, l.closing_time,
+     l.description, image_url, l.owner_name, l.owner_phone, l.owner_email],
   );
-  return { success: "Thanks! Our partnerships team will reach out within 2 business days." };
+  after(() => sendListingReceived(row.id));
+  return { success: `Thanks, ${l.owner_name.split(" ")[0]}! We'll check ${l.name} and email you at ${l.owner_email} once it's live, usually within 2 working days.` };
 }

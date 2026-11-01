@@ -88,8 +88,11 @@ export function feeLabel(b: Pick<Booking, "payment_status" | "amount" | "utr" | 
   return null;
 }
 
-export const directionsUrl = (name: string, address: string) =>
-  `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${name}, ${address}`)}`;
+/** Google Maps directions: to the exact map pin when the restaurant has one, otherwise a search for its address. */
+export const directionsUrl = (name: string, address: string, latitude?: number | null, longitude?: number | null) =>
+  latitude != null && longitude != null
+    ? `https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}`
+    : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${name}, ${address}`)}`;
 
 /**
  * Whether a booking can still be cancelled: confirmed, its table time hasn't come yet, and its fee wasn't paid.

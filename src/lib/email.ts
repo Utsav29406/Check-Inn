@@ -415,3 +415,69 @@ export async function sendCancellationEmails(code: string, by: "guest" | "admin"
     console.error(`Cancellation emails for ${code} failed:`, e);
   }
 }
+
+type ListingRow = { id: number; name: string; city: string; area: string; address: string; owner_name: string; owner_email: string; owner_phone: string; status: string; reject_reason: string | null; slug: string | null };
+const getListing = async (id: number) =>
+  (await query<ListingRow>("SELECT l.*, r.slug FROM listings l LEFT JOIN restaurants r ON r.id = l.restaurant_id WHERE l.id = $1", [id]))[0];
+
+/** A new owner listing: the owner hears it arrived, and every admin is asked to review it. Never throws. */
+export async function sendListingReceived(id: number) {
+  if (!emailEnabled()) return;
+  try {
+    const l = await getListing(id);
+    if (!l) return;
+    const rows: [string, string][] = [["Restaurant", l.name], ["Area", `${l.area}, ${l.city}`], ["Address", l.address]];
+    const admins = await query<{ name: string; email: string }>("SELECT name, email FROM admins");
+    await Promise.all([
+      sendNotice({
+        to: l.owner_email,
+        name: l.owner_name,
+        subject: `We've received your listing: ${l.name}`,
+        heading: "Listing received",
+        intro: `Thanks for listing ${l.name} on CheckInn. Our team will check the details and photo, usually within 2 working days.`,
+        rows,
+        note: "We'll email you as soon as it's live. To change anything meanwhile, just reply to this email.",
+      }),
+      ...admins.map((a) =>
+        sendNotice({
+          to: a.email,
+          name: a.name,
+          subject: `New restaurant waiting for approval: ${l.name}, ${l.city}`,
+          heading: "A restaurant is waiting for approval",
+          intro: `${l.owner_name} listed ${l.name}. It goes on the website once you approve it.`,
+          rows: [...rows, ["Owner", `${l.owner_name} · ${l.owner_phone} · ${l.owner_email}`]],
+          link: { href: `${siteUrl()}/admin/listings`, label: "Review in admin" },
+          note: "You're getting this because you're a CheckInn admin.",
+        }),
+      ),
+    ]);
+  } catch (e) {
+    console.error(`Listing emails for ${id} failed:`, e);
+  }
+}
+
+/** Tells the owner whether their listing was approved (with a link to it) or not (with the admin's reason). Never throws. */
+export async function sendListingDecision(id: number) {
+  if (!emailEnabled()) return;
+  try {
+    const l = await getListing(id);
+    if (!l || l.status === "pending") return;
+    const approved = l.status === "approved";
+    await sendNotice({
+      to: l.owner_email,
+      name: l.owner_name,
+      subject: approved ? `${l.name} is now live on CheckInn` : `About your CheckInn listing: ${l.name}`,
+      heading: approved ? "Your restaurant is live" : "Listing not approved",
+      intro: approved
+        ? `Good news: ${l.name} is now on CheckInn, and guests can book tables straight away.`
+        : `We couldn't add ${l.name} to CheckInn this time.`,
+      rows: approved ? [["Restaurant", l.name], ["Area", `${l.area}, ${l.city}`]] : [["Reason", l.reject_reason || "The details couldn't be confirmed."]],
+      link: approved && l.slug ? { href: `${siteUrl()}/restaurants/${l.slug}`, label: "See your page" } : undefined,
+      note: approved
+        ? "Bookings and their booking fees will come to you as guests book. Questions? Just reply to this email."
+        : "You're welcome to send it again with the changes, or reply to this email and we'll help.",
+    });
+  } catch (e) {
+    console.error(`Listing decision email for ${id} failed:`, e);
+  }
+}

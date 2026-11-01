@@ -11,6 +11,9 @@ export interface Restaurant {
   cuisines: string;
   price_for_two: number;
   rating: number;
+  /** Map pin, if known. */
+  latitude: number | null;
+  longitude: number | null;
   reviews_count: number;
   image_url: string;
   description: string;
@@ -94,4 +97,30 @@ export interface ScratchReveal {
   detail: string;
   code?: string;
   validUntil?: string;
+}
+
+/** A restaurant listed by its owner, waiting for (or past) admin approval. */
+export interface Listing {
+  id: number;
+  status: "pending" | "approved" | "rejected";
+  name: string;
+  city: string;
+  area: string;
+  address: string;
+  latitude: number | null;
+  longitude: number | null;
+  cuisines: string;
+  price_for_two: number;
+  food_type: FoodType;
+  opening_time: string;
+  closing_time: string;
+  description: string;
+  image_url: string;
+  owner_name: string;
+  owner_phone: string;
+  owner_email: string;
+  restaurant_id: number | null;
+  reject_reason: string | null;
+  created_at: string;
+  reviewed_at: string | null;
 }
