@@ -1,6 +1,6 @@
 import { NextResponse, after } from "next/server";
 import { cookies } from "next/headers";
-import { createSession, safeNext } from "@/lib/auth";
+import { createSession, safeNext, setWelcome } from "@/lib/auth";
 import { query } from "@/lib/db";
 import { sendSignInAlert } from "@/lib/email";
 import { requestSummary } from "@/lib/limits";
@@ -39,6 +39,7 @@ export async function GET(req: Request) {
     await createSession(userId);
     // Sign-in alert to the account's email (the user's own address, which may differ from the Google one if linked).
     const [u] = await query<{ name: string; email: string }>("SELECT name, email FROM users WHERE id = $1", [userId]);
+    if (u) await setWelcome("google", u.name);
     const where = await requestSummary();
     if (u) after(() => sendSignInAlert({ to: u.email, name: u.name, method: "Continue with Google", ...where }));
   } catch (e) {

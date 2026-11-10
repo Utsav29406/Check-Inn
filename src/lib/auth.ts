@@ -47,6 +47,19 @@ export async function createSession(userId: number) {
   });
 }
 
+/** How the visitor just signed in; the site shows a welcome pop-up for it once, then deletes the cookie. */
+export type WelcomeKind = "signin" | "signup" | "google" | "admin";
+export const WELCOME_COOKIE = "checkinn_welcome";
+
+export async function setWelcome(kind: WelcomeKind, name: string) {
+  (await cookies()).set(WELCOME_COOKIE, JSON.stringify({ kind, name: name.split(" ")[0].slice(0, 40) }), {
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 120,
+  });
+}
+
 export async function destroySession() {
   (await cookies()).delete(COOKIE);
 }

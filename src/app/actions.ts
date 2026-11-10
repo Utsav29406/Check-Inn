@@ -7,7 +7,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { query, transaction } from "@/lib/db";
-import { createSession, destroySession, getCurrentUser, safeNext, validBookingToken } from "@/lib/auth";
+import { createSession, destroySession, setWelcome, getCurrentUser, safeNext, validBookingToken } from "@/lib/auth";
 import { HOLDS_SEAT, PAYMENT_HOLD_MINUTES, buildSlots } from "@/lib/restaurants";
 import { paymentMode, upiLink } from "@/lib/payments";
 import { sendBookingConfirmation, sendCancellationEmails, sendListingReceived, sendLockoutAlert, sendSignInAlert } from "@/lib/email";
@@ -57,6 +57,7 @@ export async function signup(_: FormState, fd: FormData): Promise<FormState> {
   );
   if (!user) return { error: "An account with this email already exists. Try signing in." };
   await createSession(user.id);
+  await setWelcome("signup", name);
   redirect(safeNext(str(fd, "next")));
 }
 
@@ -83,6 +84,7 @@ export async function login(_: FormState, fd: FormData): Promise<FormState> {
   }
   await clearAttempts("login", email);
   await createSession(user.id);
+  await setWelcome("signin", user.name);
   const req = await requestSummary();
   after(() => sendSignInAlert({ to: email, name: user.name, method: "Email and password", ...req }));
   redirect(safeNext(str(fd, "next")));

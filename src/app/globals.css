@@ -230,3 +230,29 @@ html[data-opening="on"] body { animation: opening-ground 1.45s steps(1, end) bot
 @keyframes auth-in-rise {
   from { opacity: 0; transform: translateY(18px); filter: blur(6px); }
 }
+
+/* ---------- Welcome pop-up after signing in ---------- */
+.welcome-toast-wrap { padding-top: calc(env(safe-area-inset-top, 0px) + 14px); }
+.welcome-toast { animation: welcome-in 0.7s cubic-bezier(0.18, 1.25, 0.4, 1) both; }
+.welcome-toast.is-leaving { animation: welcome-out 0.35s ease-in both; }
+.welcome-avatar { animation: welcome-pop 0.55s cubic-bezier(0.3, 1.6, 0.5, 1) 0.2s both; }
+.welcome-tick { animation: welcome-pop 0.45s cubic-bezier(0.3, 1.8, 0.5, 1) 0.55s both; }
+.welcome-tick-path { stroke-dasharray: 12; stroke-dashoffset: 12; animation: welcome-draw 0.35s ease-out 0.8s forwards; }
+.welcome-title { animation: welcome-rise 0.5s ease-out 0.3s both; }
+.welcome-line { animation: welcome-rise 0.5s ease-out 0.42s both; }
+.welcome-shine {
+  background: linear-gradient(105deg, transparent 35%, rgb(233 220 184 / 0.22) 50%, transparent 65%);
+  transform: translateX(-100%);
+  animation: welcome-shine 1.1s ease-in-out 0.6s forwards;
+}
+.welcome-timer { animation: welcome-timer linear both; }
+@keyframes welcome-in { from { opacity: 0; transform: translateY(-120%) scale(0.92); } }
+@keyframes welcome-out { to { opacity: 0; transform: translateY(-60%) scale(0.95); } }
+@keyframes welcome-pop { from { opacity: 0; transform: scale(0.3); } }
+@keyframes welcome-rise { from { opacity: 0; transform: translateY(6px); } }
+@keyframes welcome-draw { to { stroke-dashoffset: 0; } }
+@keyframes welcome-shine { to { transform: translateX(100%); } }
+@keyframes welcome-timer { to { transform: scaleX(0); } }
+@media (prefers-reduced-motion: reduce) {
+  .welcome-tick-path { stroke-dashoffset: 0; }
+}

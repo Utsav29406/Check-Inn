@@ -16,6 +16,7 @@ import { LOGIN_LIMIT, clearAttempts, clientIp, recentAttempts, recordAttempt, re
 import type { FormState } from "@/app/actions";
 import type { Listing, Restaurant } from "@/lib/types";
 import { feeForPrice, parseLocation, savePhoto } from "@/lib/images";
+import { setWelcome } from "@/lib/auth";
 
 const str = (fd: FormData, key: string) => String(fd.get(key) ?? "").trim();
 const isEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
@@ -44,6 +45,7 @@ export async function adminLogin(_: FormState, fd: FormData): Promise<FormState>
   }
   await clearAttempts("admin-login", email);
   await createAdminSession(admin.id);
+  await setWelcome("admin", admin.name);
   const req = await requestSummary();
   after(() => sendSignInAlert({ to: email, name: admin.name, admin: true, method: "Email and password", ...req }));
   redirect("/admin");
