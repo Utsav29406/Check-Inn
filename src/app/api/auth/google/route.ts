@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { NextResponse } from "next/server";
 import { safeNext } from "@/lib/auth";
+import { siteUrl } from "@/lib/email";
 import { OAUTH_COOKIE, authorizationUrl, callbackUrl, googleConfig, requestOrigin } from "@/lib/google";
 
 export const dynamic = "force-dynamic";
@@ -9,6 +10,11 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const origin = requestOrigin(req);
+  // Google only accepts the main address as a return address, so on Vercel start sign-in from there,
+  // even when the visitor opened a deployment link like check-inn-abc123.vercel.app.
+  if (process.env.VERCEL && origin !== siteUrl()) {
+    return NextResponse.redirect(`${siteUrl()}/api/auth/google${url.search}`);
+  }
   const config = googleConfig();
   if (!config) return NextResponse.redirect(new URL("/login?error=google", origin));
 
