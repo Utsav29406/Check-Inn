@@ -54,14 +54,14 @@ console.log(`Seeded ${restaurants.length} restaurants`);
 const offers = [
   { code: "WELCOME50", title: "₹50 off your first table", kind: "flat", value: 50, oncePerUser: true },
   { code: "GROUP25", title: "25% off for groups of 4+", kind: "percent", value: 25, maxDiscount: 200, minGuests: 4 },
-  { code: "DIWALI101", title: "Diwali shagun: ₹101 off", kind: "flat", value: 101, oncePerUser: true, festival: "diwali", validUntil: "2026-11-15" },
+  { code: "DIWALI101", title: "Diwali shagun: ₹101 off", kind: "flat", value: 101, oncePerUser: true, festival: "diwali", validUntil: "2026-11-11" },
   {
     code: "DHAMAKA", title: "Diwali dhamaka: free table booking", kind: "percent", value: 100, maxDiscount: 501, maxUses: 101,
-    oncePerUser: true, festival: "diwali", validUntil: "2026-11-15",
+    oncePerUser: true, festival: "diwali", validUntil: "2026-11-11",
   },
   {
     code: "PARIVAAR", title: "Family feast: half off for 6+", kind: "percent", value: 50, maxDiscount: 501, minGuests: 6,
-    festival: "diwali", validUntil: "2026-11-15",
+    festival: "diwali", validUntil: "2026-11-11",
   },
 ];
 for (const o of offers) {
@@ -72,4 +72,8 @@ for (const o of offers) {
   );
 }
 console.log(`Seeded ${offers.length} offers`);
+
+// Diwali 2026 ended after Bhai Dooj (11 Nov): close the Diwali offers that were seeded to run until 15 Nov.
+const { rowCount: closed } = await client.query("UPDATE coupons SET valid_until = '2026-11-11' WHERE festival = 'diwali' AND user_id IS NULL AND (valid_until IS NULL OR valid_until > '2026-11-11')");
+if (closed) console.log(`Ended ${closed} Diwali offers`);
 await client.end();

@@ -17,6 +17,8 @@ import type { FormState } from "@/app/actions";
 import type { Listing, Restaurant } from "@/lib/types";
 import { feeForPrice, parseLocation, savePhoto } from "@/lib/images";
 import { setWelcome } from "@/lib/auth";
+import { cookies } from "next/headers";
+import { PREVIEW_COOKIE } from "@/lib/festival";
 
 const str = (fd: FormData, key: string) => String(fd.get(key) ?? "").trim();
 const isEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
@@ -379,6 +381,8 @@ export async function setFestival(fd: FormData) {
     "INSERT INTO site_settings (key, value) VALUES ('festival', $1) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
     [value],
   );
+  // Switching off also ends this browser's preview, so the admin sees what everyone else sees.
+  if (value === "off") (await cookies()).delete(PREVIEW_COOKIE);
   refresh();
 }
 

@@ -15,7 +15,7 @@ export interface Festival {
   preview: boolean;
 }
 
-export const DIWALI = { key: "diwali", name: "Diwali", day: "2026-11-08", ends: "2026-11-15" } as const;
+export const DIWALI = { key: "diwali", name: "Diwali", day: "2026-11-08", ends: "2026-11-11" } as const;
 
 /** Cookie set by /api/preview so one browser can see the festival theme before it's switched on. */
 export const PREVIEW_COOKIE = "checkinn_preview";
