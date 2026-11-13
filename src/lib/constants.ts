@@ -95,11 +95,12 @@ export const directionsUrl = (name: string, address: string, latitude?: number |
     : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${name}, ${address}`)}`;
 
 /**
- * Whether a booking can still be cancelled: confirmed, its table time hasn't come yet, and its fee wasn't paid.
+ * Whether a booking can still be cancelled: confirmed, its table time hasn't come yet, and its fee wasn't paid
+ * (or sent by UPI and waiting to be checked).
  * (Cancelling frees the table and any offer it used, so it must not be possible after the meal.)
  */
 export function canCancel(b: Pick<Booking, "status" | "booking_date" | "slot_time" | "payment_status">) {
-  if (b.status !== "confirmed" || b.payment_status === "paid") return false;
+  if (b.status !== "confirmed" || b.payment_status === "paid" || b.payment_status === "review") return false;
   const now = nowInIndia();
   const [h, m] = b.slot_time.split(":").map(Number);
   return b.booking_date > now.date || (b.booking_date === now.date && h * 60 + m > now.minutes);

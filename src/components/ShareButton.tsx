@@ -8,7 +8,7 @@ export function ShareButton({ title, path, className, children, label = "Share" 
   return (
     <button
       type="button"
-      aria-label={label}
+      aria-label={label || "Share"}
       className={className}
       onClick={async () => {
         const url = new URL(path, window.location.origin).href;
@@ -24,7 +24,9 @@ export function ShareButton({ title, path, className, children, label = "Share" 
           await navigator.clipboard.writeText(url);
           setCopied(true);
           setTimeout(() => setCopied(false), 1600);
-        } catch {}
+        } catch {
+          window.prompt("Copy this link", url);
+        }
       }}
     >
       {children}

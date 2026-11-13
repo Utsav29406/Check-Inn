@@ -76,4 +76,9 @@ console.log(`Seeded ${offers.length} offers`);
 // Diwali 2026 ended after Bhai Dooj (11 Nov): close the Diwali offers that were seeded to run until 15 Nov.
 const { rowCount: closed } = await client.query("UPDATE coupons SET valid_until = '2026-11-11' WHERE festival = 'diwali' AND user_id IS NULL AND (valid_until IS NULL OR valid_until > '2026-11-11')");
 if (closed) console.log(`Ended ${closed} Diwali offers`);
+// Scratch-card prizes won during Diwali stay usable, under a name that doesn't mention the festival.
+const { rowCount: renamed } = await client.query(
+  "UPDATE coupons SET title = replace(replace(title, 'Free Diwali table booking', 'Free table booking'), 'Diwali shagun', 'Shagun') WHERE user_id IS NOT NULL AND title LIKE '%Diwali%'",
+);
+if (renamed) console.log(`Renamed ${renamed} Diwali scratch-card prizes`);
 await client.end();

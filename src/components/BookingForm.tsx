@@ -38,12 +38,19 @@ export function BookingForm({ restaurant, payOnline, slots, dates, memberExtra, 
   const [usage, setUsage] = useState<Record<string, number>>({});
   const [blocked, setBlocked] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  // Set when the free/full check couldn't load; the times are still bookable (the server checks again), with a retry.
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [retry, setRetry] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setLoadFailed(false);
     fetch(`/api/availability?restaurantId=${restaurant.id}&date=${date}`)
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`availability ${r.status}`);
+        return r.json();
+      })
       .then((d) => {
         if (cancelled) return;
         setUsage(d.usage ?? {});
@@ -53,12 +60,13 @@ export function BookingForm({ restaurant, payOnline, slots, dates, memberExtra, 
         if (cancelled) return;
         setUsage({});
         setBlocked([]);
+        setLoadFailed(true);
       })
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
     };
-  }, [date, restaurant.id]);
+  }, [date, restaurant.id, retry]);
 
   // Our own UPI QR: show it until the guest enters the UTR (which redirects) or closes it.
   const [upi, setUpi] = useState<UpiRequest | null>(null);
@@ -189,6 +197,14 @@ export function BookingForm({ restaurant, payOnline, slots, dates, memberExtra, 
 
         <div>
           <Label>Time {loading && <Loader2 className="ml-1 inline h-3.5 w-3.5 animate-spin" />}</Label>
+          {loadFailed && (
+            <p className="mb-2 text-xs text-muted">
+              Couldn&apos;t check which times are free.{" "}
+              <button type="button" onClick={() => setRetry((n) => n + 1)} className="font-semibold text-brand-600 underline">
+                Try again
+              </button>
+            </p>
+          )}
           {groups.length > 1 && (
             <div role="tablist" className="mb-3 flex gap-1 rounded-xl bg-sand p-1 md:hidden">
               {groups.map((g) => (

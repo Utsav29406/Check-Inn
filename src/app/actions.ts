@@ -66,7 +66,9 @@ export async function login(_: FormState, fd: FormData): Promise<FormState> {
   const password = str(fd, "password");
   const ip = await clientIp();
   const { perEmail, perIp, minutes } = LOGIN_LIMIT;
-  if ((await recentAttempts("login", email, minutes)) >= perEmail || (await recentAttempts("login-ip", ip, minutes)) >= perIp) {
+  // Each try is counted before the password is checked, so many guesses sent at once can't all slip under the limit.
+  await Promise.all([recordAttempt("login", email), recordAttempt("login-ip", ip)]);
+  if ((await recentAttempts("login", email, minutes)) > perEmail || (await recentAttempts("login-ip", ip, minutes)) > perIp) {
     return { error: `Too many wrong passwords. Please wait ${minutes} minutes and try again, or use Continue with Google.` };
   }
   const [user] = await query<{ id: number; name: string; password_hash: string | null }>(
@@ -75,7 +77,6 @@ export async function login(_: FormState, fd: FormData): Promise<FormState> {
   );
   // One message for every failure, so the form doesn't reveal which emails have accounts.
   if (!user?.password_hash || !(await bcrypt.compare(password, user.password_hash))) {
-    await Promise.all([recordAttempt("login", email), recordAttempt("login-ip", ip)]);
     if (user && (await recentAttempts("login", email, minutes)) === perEmail) {
       const req = await requestSummary();
       after(() => sendLockoutAlert({ to: email, name: user.name, minutes, ...req }));
@@ -147,7 +148,6 @@ export async function createBooking(_: FormState, fd: FormData): Promise<FormSta
     );
     if (today >= perEmailDay) return { error: "This email address has been used for too many bookings today. Please try again tomorrow." };
   }
-  await recordAttempt("booking-ip", ip);
 
   const [user, festival] = await Promise.all([getCurrentUser(), getFestival()]);
   const mode = paymentMode();
@@ -225,6 +225,8 @@ export async function createBooking(_: FormState, fd: FormData): Promise<FormSta
     if (e instanceof BookingError) return { error: e.message };
     throw e;
   }
+  // Counted only once a table is booked, so guests who hit a full slot a few times aren't locked out.
+  await recordAttempt("booking-ip", ip);
 
   if (booking.online) {
     const link = upiLink(booking.amount, `CheckInn ${booking.code}`);
@@ -303,7 +305,7 @@ export async function cancelBooking(fd: FormData) {
   const now = nowInIndia();
   const cancelled = await query(
     `UPDATE bookings SET status = 'cancelled'
-     WHERE code = $1 AND status = 'confirmed' AND payment_status <> 'paid'
+     WHERE code = $1 AND status = 'confirmed' AND payment_status NOT IN ('paid', 'review')
        AND (booking_date > $2 OR (booking_date = $2 AND slot_time > make_time($5, $6, 0)))
        AND ($3::boolean OR user_id = $4)
      RETURNING code`,
@@ -376,7 +378,9 @@ export async function submitListing(_: FormState, fd: FormData): Promise<FormSta
   if (!isEmail(l.owner_email)) return { error: "Please enter a valid email address." };
 
   const ip = await clientIp();
-  if ((await recentAttempts("listing-ip", ip, 24 * 60)) >= 5) return { error: "Too many listings from this connection today. Please try again tomorrow." };
+  // Counted before the slow location and photo work, so parallel submissions can't all get through.
+  await recordAttempt("listing-ip", ip);
+  if ((await recentAttempts("listing-ip", ip, 24 * 60)) > 8) return { error: "Too many listings from this connection today. Please try again tomorrow." };
 
   const location = await parseLocation(str(fd, "location"));
   if (location === "invalid") return { error: "We couldn't read that location. Paste a Google Maps share link, or use your current location." };
@@ -384,7 +388,6 @@ export async function submitListing(_: FormState, fd: FormData): Promise<FormSta
   const image_url = await savePhoto(str(fd, "photo"));
   if (!image_url) return { error: "Please upload a photo of the restaurant (JPG, PNG or WebP)." };
 
-  await recordAttempt("listing-ip", ip);
   const [row] = await query<{ id: number }>(
     `INSERT INTO listings (name, city, area, address, latitude, longitude, cuisines, price_for_two, food_type, opening_time, closing_time,
        description, image_url, owner_name, owner_phone, owner_email)

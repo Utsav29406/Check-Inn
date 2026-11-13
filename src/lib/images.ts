@@ -32,7 +32,12 @@ const coords = (lat: number, lng: number) =>
 
 /** Coordinates from "23.03, 72.58" or a full Google Maps link (…/@23.03,72.58,…, ?q=23.03,72.58, !3d23.03!4d72.58). */
 export function coordsFromText(text: string) {
-  const t = decodeURIComponent(text.trim());
+  let t = text.trim();
+  try {
+    t = decodeURIComponent(t);
+  } catch {
+    // Text like "near 50% circle" isn't encoded; read it as typed.
+  }
   const patterns = [/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/, /@(-?\d+\.\d+),\s*(-?\d+\.\d+)/, /[?&](?:q|query|ll|destination)=(-?\d+\.\d+),\s*(-?\d+\.\d+)/, /^(-?\d{1,2}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)$/];
   for (const re of patterns) {
     const m = re.exec(t);
@@ -54,6 +59,9 @@ export async function parseLocation(input: string): Promise<{ latitude: number; 
     try {
       let url = text;
       for (let hop = 0; hop < 4; hop++) {
+        // Only ever follow links to Google, never to other or internal addresses.
+        const at = new URL(url);
+        if (at.protocol !== "https:" || !/(^|\.)(google\.(com|com?\.[a-z]{2}|[a-z]{2})|goo\.gl)$/.test(at.hostname)) break;
         const res = await fetch(url, { redirect: "manual", signal: AbortSignal.timeout(5000) });
         const next = res.headers.get("location");
         if (!next) break;

@@ -40,7 +40,10 @@ export async function getCurrentAdmin(): Promise<Admin | null> {
   try {
     const { payload } = await jwtVerify(token, secret());
     if (payload.typ !== "admin") return null;
-    const [admin] = await query<Admin>("SELECT id, name, email FROM admins WHERE id = $1", [payload.aid]);
+    const [admin] = await query<Admin>(
+      "SELECT id, name, email FROM admins WHERE id = $1 AND (sessions_valid_after IS NULL OR $2 >= floor(extract(epoch FROM sessions_valid_after)) - 5)",
+      [payload.aid, payload.iat ?? 0],
+    );
     return admin ?? null;
   } catch {
     return null;

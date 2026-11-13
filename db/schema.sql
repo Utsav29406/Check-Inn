@@ -213,3 +213,8 @@ CREATE TABLE IF NOT EXISTS listings (
   reviewed_at    TIMESTAMPTZ
 );
 CREATE INDEX IF NOT EXISTS idx_listings_status ON listings (status, created_at);
+
+-- Sign-ins issued before this time stop working: set when Google is linked to an account someone else may have
+-- registered with that email, and when an admin's password changes.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS sessions_valid_after TIMESTAMPTZ;
+ALTER TABLE admins ADD COLUMN IF NOT EXISTS sessions_valid_after TIMESTAMPTZ;

@@ -38,9 +38,15 @@ export function ScratchCard({
   const start = () => {
     if (started.current) return;
     started.current = true;
+    // On failure, allow another try instead of leaving the card stuck until the page is reloaded.
+    const fail = (message?: string) => {
+      started.current = false;
+      setError(message);
+    };
+    setError(undefined);
     scratchMyCard(id)
-      .then((r) => (r.reveal ? setReveal(r.reveal) : setError(r.error)))
-      .catch(() => setError("Couldn't reach CheckInn. Check your connection and try again."));
+      .then((r) => (r.reveal ? setReveal(r.reveal) : fail(r.error)))
+      .catch(() => fail("Couldn't reach CheckInn. Check your connection and try again."));
   };
 
   const finish = () => {

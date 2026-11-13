@@ -82,7 +82,11 @@ export async function sendBookingReminder(code: string, { force = false } = {}):
   if (!b.guest_email) return { sent: false, reason: "The guest didn't give an email address." };
   const {
     rows: [claimed],
-  } = await db().query("UPDATE bookings SET reminder_sent_at = now() WHERE code = $1 AND ($2 OR reminder_sent_at IS NULL) RETURNING code", [code, force]);
+  } = await db().query<{ prev: Date | null }>(
+    `UPDATE bookings b SET reminder_sent_at = now() FROM (SELECT reminder_sent_at AS prev FROM bookings WHERE code = $1) o
+     WHERE b.code = $1 AND ($2 OR b.reminder_sent_at IS NULL) RETURNING o.prev`,
+    [code, force],
+  );
   if (!claimed) return { sent: false, reason: "A reminder was already sent." };
   const when = `${fmtDate(b.booking_date, { weekday: "long", day: "numeric", month: "long" })}, ${fmtTime(b.slot_time)}`;
   try {
@@ -96,7 +100,8 @@ export async function sendBookingReminder(code: string, { force = false } = {}):
     });
     return { sent: true };
   } catch (e) {
-    await db().query("UPDATE bookings SET reminder_sent_at = NULL WHERE code = $1", [code]);
+    // Put back the earlier mark, so a failed resend doesn't make the booking due for another automatic reminder.
+    await db().query("UPDATE bookings SET reminder_sent_at = $2 WHERE code = $1", [code, claimed.prev]);
     console.error(`Reminder email for ${code} failed:`, e);
     return { sent: false, reason: "Gmail couldn't send it. Try again in a minute." };
   }
@@ -119,7 +124,14 @@ export async function sendTodaysReminders() {
     [now.date, Math.floor(now.minutes / 60), now.minutes % 60, addDays(now.date, 1), EARLY_TABLES_BEFORE],
   );
   let sent = 0;
-  for (const { code } of due) if ((await sendBookingReminder(code)).sent) sent++;
+  for (const { code } of due) {
+    // One failure (a dropped database connection, say) mustn't stop everyone else's reminder.
+    try {
+      if ((await sendBookingReminder(code)).sent) sent++;
+    } catch (e) {
+      console.error(`Reminder for ${code} failed:`, e);
+    }
+  }
   return { due: due.length, sent };
 }
 

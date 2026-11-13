@@ -33,7 +33,7 @@ export default async function AdminDashboard() {
          (SELECT count(*) FROM bookings WHERE status = 'confirmed' AND booking_date BETWEEN $1 AND $2)::int AS week_bookings,
          (SELECT COALESCE(sum(amount), 0) FROM bookings WHERE status = 'confirmed' AND payment_status = 'due' AND booking_date >= $1)::int AS fees_due,
          (SELECT count(*) FROM bookings WHERE payment_status = 'review')::int AS upi_to_check,
-         (SELECT count(*) FROM partner_requests WHERE status = 'new')::int AS new_partners,
+         (SELECT count(*) FROM listings WHERE status = 'pending')::int AS new_partners,
          (SELECT count(*) FROM users)::int AS users`,
       [today, addDays(today, 6)],
     ),
@@ -53,7 +53,7 @@ export default async function AdminDashboard() {
         <StatCard label="Next 7 days" value={stats.week_bookings} hint="confirmed bookings" href="/admin/bookings" />
         <StatCard label="Fees due" value={inr(stats.fees_due)} hint="to collect at restaurants" href="/admin/bookings?pay=due" />
         {paymentMode() === "upi" && <StatCard label="UPI to check" value={stats.upi_to_check} href="/admin/payments" />}
-        <StatCard label="New partners" value={stats.new_partners} hint="restaurant requests" href="/admin/users#partners" />
+        <StatCard label="New listings" value={stats.new_partners} hint="waiting for approval" href="/admin/listings" />
         <StatCard label="Users" value={stats.users} href="/admin/users" />
       </div>
 

@@ -45,7 +45,7 @@ export default async function RestaurantsPage({ searchParams }: { searchParams: 
               className="w-full bg-transparent py-3 text-base outline-none placeholder:text-muted"
             />
           </form>
-          <FilterSheet sp={sp} priceBands={Object.entries(PRICE_BANDS).map(([k, b]) => [k, b.label])} />
+          <FilterSheet key={JSON.stringify(sp)} sp={sp} priceBands={Object.entries(PRICE_BANDS).map(([k, b]) => [k, b.label])} />
         </div>
         <div className="no-scrollbar -mx-4 mt-3 flex gap-2 overflow-x-auto px-4">
           {(["veg", "nonveg"] as const).map((t) => (

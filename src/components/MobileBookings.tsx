@@ -45,6 +45,8 @@ export function MobileBookings({ upcoming, past, tab }: { upcoming: Booking[]; p
             </div>
             {b.status === "cancelled" ? (
               <span className="rounded-full bg-sand px-2.5 py-1 text-[11px] font-bold text-muted">Cancelled</span>
+            ) : b.status === "pending" ? (
+              <span className="rounded-full bg-sand px-2.5 py-1 text-[11px] font-bold text-muted">Not booked</span>
             ) : tab === "past" ? (
               <span className="rounded-full bg-sand px-2.5 py-1 text-[11px] font-bold text-muted">Visited</span>
             ) : (

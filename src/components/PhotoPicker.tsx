@@ -8,14 +8,36 @@ const MAX_SIDE = 1600;
 
 /** Shrinks a photo in the browser (so phone photos of 5–10 MB upload as about 300 KB) and returns a JPEG data URL. */
 async function shrink(file: File): Promise<string> {
-  const bitmap = await createImageBitmap(file);
-  const scale = Math.min(1, MAX_SIDE / Math.max(bitmap.width, bitmap.height));
+  const { image, width, height, done } = await decode(file);
+  const scale = Math.min(1, MAX_SIDE / Math.max(width, height));
   const canvas = document.createElement("canvas");
-  canvas.width = Math.round(bitmap.width * scale);
-  canvas.height = Math.round(bitmap.height * scale);
-  canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  bitmap.close?.();
+  canvas.width = Math.round(width * scale);
+  canvas.height = Math.round(height * scale);
+  canvas.getContext("2d")!.drawImage(image, 0, 0, canvas.width, canvas.height);
+  done();
   return canvas.toDataURL("image/jpeg", 0.82);
+}
+
+/** createImageBitmap where the browser has it; an <img> otherwise (older iPhones). */
+async function decode(file: File): Promise<{ image: CanvasImageSource; width: number; height: number; done: () => void }> {
+  if (typeof createImageBitmap === "function") {
+    try {
+      const bitmap = await createImageBitmap(file);
+      return { image: bitmap, width: bitmap.width, height: bitmap.height, done: () => bitmap.close?.() };
+    } catch {
+      // Fall back to <img> below.
+    }
+  }
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.src = url;
+  try {
+    await img.decode();
+  } catch (e) {
+    URL.revokeObjectURL(url);
+    throw e;
+  }
+  return { image: img, width: img.naturalWidth, height: img.naturalHeight, done: () => URL.revokeObjectURL(url) };
 }
 
 /**

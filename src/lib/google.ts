@@ -89,7 +89,8 @@ export async function exchangeCode(opts: {
 /**
  * Finds the user by Google ID, else links the existing account with the same verified email, else creates one.
  * Signup never verified that email, so when linking, the old password is removed: otherwise whoever signed up
- * with someone else's address could keep signing in to the real owner's account.
+ * with someone else's address could keep signing in to the real owner's account. Their existing sign-ins end too
+ * (with 5 seconds of leeway in the check, for clock differences between the server and the database).
  */
 export async function findOrCreateGoogleUser(p: GoogleProfile): Promise<number> {
   const [existing] = await query<{ id: number }>("SELECT id FROM users WHERE google_id = $1", [p.sub]);
@@ -97,7 +98,8 @@ export async function findOrCreateGoogleUser(p: GoogleProfile): Promise<number> 
   const [user] = await query<{ id: number }>(
     `INSERT INTO users (name, email, google_id) VALUES ($1, $2, $3)
      ON CONFLICT (email) DO UPDATE SET google_id = COALESCE(users.google_id, EXCLUDED.google_id),
-       password_hash = CASE WHEN users.google_id IS NULL THEN NULL ELSE users.password_hash END
+       password_hash = CASE WHEN users.google_id IS NULL THEN NULL ELSE users.password_hash END,
+       sessions_valid_after = CASE WHEN users.google_id IS NULL THEN now() ELSE users.sessions_valid_after END
      RETURNING id`,
     [p.name.slice(0, 120), p.email, p.sub],
   );

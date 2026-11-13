@@ -33,12 +33,13 @@ export async function adminLogin(_: FormState, fd: FormData): Promise<FormState>
   const email = str(fd, "email").toLowerCase();
   const ip = await clientIp();
   const { perEmail, perIp, minutes } = LOGIN_LIMIT;
-  if ((await recentAttempts("admin-login", email, minutes)) >= perEmail || (await recentAttempts("admin-login-ip", ip, minutes)) >= perIp) {
+  // Counted before the password check, so parallel guesses can't all slip under the limit.
+  await Promise.all([recordAttempt("admin-login", email), recordAttempt("admin-login-ip", ip)]);
+  if ((await recentAttempts("admin-login", email, minutes)) > perEmail || (await recentAttempts("admin-login-ip", ip, minutes)) > perIp) {
     return { error: `Too many wrong passwords. Please wait ${minutes} minutes and try again.` };
   }
   const [admin] = await query<{ id: number; name: string; password_hash: string }>("SELECT id, name, password_hash FROM admins WHERE email = $1", [email]);
   if (!admin || !(await bcrypt.compare(str(fd, "password"), admin.password_hash))) {
-    await Promise.all([recordAttempt("admin-login", email), recordAttempt("admin-login-ip", ip)]);
     if (admin && (await recentAttempts("admin-login", email, minutes)) === perEmail) {
       const req = await requestSummary();
       after(() => sendLockoutAlert({ to: email, name: admin.name, admin: true, minutes, ...req }));
@@ -99,7 +100,7 @@ export async function addAdmin(_: FormState, fd: FormData): Promise<FormState> {
 
 /** Change an admin's name or email, and optionally set a new password. */
 export async function updateAdmin(_: FormState, fd: FormData): Promise<FormState> {
-  await requireAdmin();
+  const me = await requireAdmin();
   const id = Number(fd.get("id"));
   const name = str(fd, "name");
   const email = str(fd, "email").toLowerCase();
@@ -109,13 +110,15 @@ export async function updateAdmin(_: FormState, fd: FormData): Promise<FormState
   if (password && password.length < 10) return { error: "Use a password of at least 10 characters, or leave it empty to keep the current one." };
   try {
     const { rowCount } = password
-      ? await db().query("UPDATE admins SET name = $2, email = $3, password_hash = $4 WHERE id = $1", [id, name, email, await bcrypt.hash(password, 10)])
+      ? await db().query("UPDATE admins SET name = $2, email = $3, password_hash = $4, sessions_valid_after = now() WHERE id = $1", [id, name, email, await bcrypt.hash(password, 10)])
       : await db().query("UPDATE admins SET name = $2, email = $3 WHERE id = $1", [id, name, email]);
     if (!rowCount) return { error: "This admin no longer exists." };
   } catch (e) {
     if ((e as { code?: string }).code === "23505") return { error: "Another admin already uses this email." };
     throw e;
   }
+  // A new password signs that admin out everywhere; keep the admin who changed their own password signed in here.
+  if (password && id === me.id) await createAdminSession(me.id);
   revalidatePath("/admin", "layout");
   return { success: password ? "Saved, including the new password." : "Saved." };
 }
@@ -226,6 +229,9 @@ export async function setDayClosed(fd: FormData) {
 
 const slugify = (s: string) =>
   s.toLowerCase().replace(/['’]/g, "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+/** "name-place" for a restaurant's address on the site: short enough for the column (140, with room for "-12"), never empty. */
+const restaurantSlug = (name: string, place: string) =>
+  [slugify(name), slugify(place)].filter(Boolean).join("-").slice(0, 120).replace(/-+$/, "") || "restaurant";
 
 /** Add (no id) or update a restaurant. */
 export async function saveRestaurant(_: FormState, fd: FormData): Promise<FormState> {
@@ -305,7 +311,7 @@ export async function saveRestaurant(_: FormState, fd: FormData): Promise<FormSt
     if (!row) return { error: "This restaurant no longer exists." };
     slug = row.slug;
   } else {
-    const base = `${slugify(r.name)}-${slugify(r.city)}`;
+    const base = restaurantSlug(r.name, r.city);
     slug = base;
     for (let n = 2; await getRestaurant(slug); n++) slug = `${base}-${n}`;
     await query(
@@ -413,7 +419,7 @@ export async function approveListing(fd: FormData) {
       rows: [l],
     } = await client.query<Listing>("SELECT * FROM listings WHERE id = $1 AND status = 'pending' FOR UPDATE", [id]);
     if (!l) return false;
-    const base = `${slugify(l.name)}-${slugify(l.area)}`;
+    const base = restaurantSlug(l.name, l.area);
     let slug = base;
     for (let n = 2; (await client.query("SELECT 1 FROM restaurants WHERE slug = $1", [slug])).rowCount; n++) slug = `${base}-${n}`;
     const {

@@ -4,7 +4,7 @@ import { CalendarDays, Clock, MapPin, Users, BadgePercent, CircleCheck, CircleX,
 import { getBooking } from "@/lib/bookings";
 import { getCurrentUser, validBookingToken } from "@/lib/auth";
 import { fmtDate, fmtTime } from "@/lib/time";
-import { cancelBooking } from "@/app/actions";
+import { CancelButton } from "@/components/CancelButton";
 import { canCancel, feeLabel } from "@/lib/constants";
 import { getBookingScratchCard } from "@/lib/offers";
 import { getFestival } from "@/lib/festival";
@@ -85,11 +85,15 @@ export default async function BookingPage({
             My bookings
           </Link>
           {cancellable && (
-            <form action={cancelBooking} className="flex-1">
-              <input type="hidden" name="code" value={b.code} />
-              {viaEmail && <input type="hidden" name="t" value={t} />}
-              <button className="w-full rounded-xl bg-ink py-3 font-semibold text-white hover:bg-brand-900">Cancel booking</button>
-            </form>
+            <div className="flex flex-1">
+              <CancelButton
+                code={b.code}
+                token={viaEmail ? (t ?? undefined) : undefined}
+                label="Cancel booking"
+                icon={false}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-ink py-3 font-semibold text-white hover:bg-brand-900 disabled:opacity-70"
+              />
+            </div>
           )}
         </div>
       </div>

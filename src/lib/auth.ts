@@ -70,8 +70,9 @@ export async function getCurrentUser(): Promise<User | null> {
   try {
     const { payload } = await jwtVerify(token, secret());
     const [user] = await query<User>(
-      "SELECT id, name, email, phone, membership_tier, membership_expires FROM users WHERE id = $1",
-      [payload.uid],
+      `SELECT id, name, email, phone, membership_tier, membership_expires FROM users
+       WHERE id = $1 AND (sessions_valid_after IS NULL OR $2 >= floor(extract(epoch FROM sessions_valid_after)) - 5)`,
+      [payload.uid, payload.iat ?? 0],
     );
     return user ?? null;
   } catch {

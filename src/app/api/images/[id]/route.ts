@@ -2,8 +2,9 @@ import { query } from "@/lib/db";
 
 /** Serves an uploaded photo. Photos never change once saved, so browsers and Vercel's CDN keep them for a year. */
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
-  const id = Number((await params).id);
-  if (!Number.isInteger(id) || id < 1) return new Response("Not found", { status: 404 });
+  const raw = (await params).id;
+  const id = Number(raw);
+  if (!/^\d{1,9}$/.test(raw) || id < 1) return new Response("Not found", { status: 404 });
   const [img] = await query<{ content_type: string; data: Buffer }>("SELECT content_type, data FROM images WHERE id = $1", [id]);
   if (!img) return new Response("Not found", { status: 404 });
   return new Response(new Uint8Array(img.data), {
