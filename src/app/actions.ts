@@ -10,7 +10,8 @@ import { db, query, transaction } from "@/lib/db";
 import { createSession, destroySession, setWelcome, getCurrentUser, safeNext, validBookingToken } from "@/lib/auth";
 import { HOLDS_SEAT, PAYMENT_HOLD_MINUTES, buildSlots } from "@/lib/restaurants";
 import { paymentMode, upiDemo, upiEnabled, upiId, upiLink } from "@/lib/payments";
-import { sendBookingConfirmation, sendCancellationEmails, sendListingReceived, sendLockoutAlert, sendMembershipPaymentReceived, sendSignInAlert } from "@/lib/email";
+import { TEST, UPI_APPS, upiPayLink, cardBrand, cardDeclined, cardProblem, digits, upiDeclined, upiValid } from "@/lib/checkinnpay";
+import { sendBookingConfirmation, sendCancellationEmails, sendListingReceived, sendLockoutAlert, sendMembershipDecision, sendMembershipPaymentReceived, sendSignInAlert } from "@/lib/email";
 import { BOOKING_LIMIT, LOGIN_LIMIT, clearAttempts, clientIp, recentAttempts, recordAttempt, requestSummary } from "@/lib/limits";
 import { CITIES, PLANS, memberExtraDiscount } from "@/lib/constants";
 import { parseLocation, savePhoto } from "@/lib/images";
@@ -365,9 +366,72 @@ export async function startMembership(tier: string): Promise<{ checkout?: Member
     [user.id, plan.tier, plan.price],
   );
   if (!row) [row] = await query<{ id: number }>("INSERT INTO membership_payments (user_id, tier, amount) VALUES ($1, $2, $3) RETURNING id", [user.id, plan.tier, plan.price]);
-  const link = upiLink(plan.price, `CheckInn Club ${plan.name} M${row.id}`);
+  const note = `CheckInn Club ${plan.name} M${row.id}`;
+  // Demo mode: CheckInn Pay's made-up payee, which real UPI apps refuse.
+  const link = upiDemo() ? upiPayLink(`M${row.id}`, plan.price, note) : upiLink(plan.price, note);
   const qr = await QRCode.toString(link, { type: "svg", margin: 1, errorCorrectionLevel: "M", color: { dark: "#061f19", light: "#ffffff" } });
   return { checkout: { id: row.id, plan: plan.name, amount: plan.price, upiId: upiId(), link, qr, demo: upiDemo() } };
+}
+
+/** What CheckInn Pay's window sends: card details with the OTP, or how UPI was paid. */
+export type CheckInnPayBody =
+  | { method: "card"; card: { number: string; expiry: string; cvv: string; otp: string } }
+  | { method: "upi"; upi: { qr?: boolean; app?: string; vpa?: string; simulate?: "decline" } };
+
+/**
+ * CheckInn Pay, the demo gateway, for Club membership: decides the payment the way a bank would, from the details
+ * entered (lib/checkinnpay has the test cards, UPI IDs and OTP). No money moves; card numbers are checked and dropped,
+ * only the last four are kept. A paid membership starts straight away. Only used while no real UPI ID is set.
+ */
+export async function payMembership(id: number, body: CheckInnPayBody): Promise<{ paid: boolean; error?: string; invalid?: boolean }> {
+  const user = await getCurrentUser();
+  if (!user) return { paid: false, error: "Please sign in again." };
+  if (!upiDemo()) return { paid: false, error: "CheckInn Pay is off. Please pay by UPI." };
+  const stamp = Date.now().toString(36).toUpperCase();
+  let ref: string;
+  if (body?.method === "card") {
+    const card = { number: String(body.card?.number ?? ""), expiry: String(body.card?.expiry ?? ""), cvv: String(body.card?.cvv ?? "") };
+    const problem = cardProblem(card);
+    if (problem) return { paid: false, invalid: true, error: problem };
+    if (String(body.card?.otp ?? "") !== TEST.otp) return { paid: false, error: "Incorrect OTP. The payment was not made." };
+    if (cardDeclined(card.number)) return { paid: false, error: "Your bank declined this card. No money was taken." };
+    ref = `CPAY-CARD-${(cardBrand(card.number) ?? "CARD").toUpperCase()}-${digits(card.number).slice(-4)}-${stamp}`;
+  } else if (body?.method === "upi" && (body.upi?.qr === true || UPI_APPS.some((a) => a.id === body.upi?.app))) {
+    // Scanned QR (laptop) or a hand-off to a UPI app (phone): "I've paid" stands for the app confirming.
+    if (body.upi.simulate === "decline") return { paid: false, error: "The payment was not completed in the UPI app. No money was taken." };
+    ref = body.upi.qr === true ? `CPAY-UPI-QR-${stamp}` : `CPAY-UPI-APP-${stamp}`;
+  } else if (body?.method === "upi") {
+    const vpa = String(body.upi?.vpa ?? "").trim().toLowerCase();
+    if (!upiValid(vpa)) return { paid: false, invalid: true, error: "Check the UPI ID." };
+    if (upiDeclined(vpa)) return { paid: false, error: "The payment request was declined in the UPI app." };
+    ref = `CPAY-UPI-${stamp}`;
+  } else {
+    return { paid: false, invalid: true, error: "Choose card or UPI." };
+  }
+
+  const today = nowInIndia().date;
+  const paid = await transaction(async (client) => {
+    const {
+      rows: [p],
+    } = await client.query<{ tier: string }>(
+      "UPDATE membership_payments SET status = 'verified', ref = $3, reviewed_at = now() WHERE id = $1 AND user_id = $2 AND status = 'pending' RETURNING tier",
+      [id, user.id, ref],
+    );
+    if (!p) return false;
+    // Same rule as an admin verifying a UPI payment: a year from today, or a year added to the same plan's time left.
+    await client.query(
+      `UPDATE users SET membership_tier = $2::varchar,
+         membership_expires = (CASE WHEN membership_tier = $2::varchar AND membership_expires >= $3::date THEN membership_expires ELSE $3::date END + INTERVAL '1 year')::date
+       WHERE id = $1`,
+      [user.id, p.tier, today],
+    );
+    return true;
+  });
+  if (!paid) return { paid: false, error: "This payment was already made or closed. Reload the page." };
+  after(() => sendMembershipDecision(id));
+  // No revalidatePath here: refreshing now would swap the Join button (and this window) for "Your current plan" before
+  // the success screen shows. The window refreshes the page itself once it closes; every page reads the plan fresh.
+  return { paid: true };
 }
 
 /** The member paid and entered the UTR: the payment waits for an admin to match it with the bank statement. */

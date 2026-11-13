@@ -16,7 +16,7 @@ const TABS = [
   ["rejected", "Rejected"],
 ] as const;
 
-type ClubRow = { id: number; tier: string; amount: number; utr: string; created_at: string; reviewed_at: string | null; name: string; email: string; phone: string | null };
+type ClubRow = { id: number; tier: string; amount: number; utr: string | null; ref: string | null; created_at: string; reviewed_at: string | null; name: string; email: string; phone: string | null };
 type TableRow = Pick<Booking, "code" | "guest_name" | "guest_phone" | "booking_date" | "slot_time" | "guests" | "amount" | "utr" | "status"> & { restaurant_name: string };
 
 const when = (ts: string) =>
@@ -29,7 +29,7 @@ export default async function AdminPayments({ searchParams }: { searchParams: Pr
   const tab = TABS.some(([k]) => k === rawTab) ? rawTab! : "review";
   const [club, tables] = await Promise.all([
     query<ClubRow>(
-      `SELECT p.id, p.tier, p.amount, p.utr, p.created_at, p.reviewed_at, u.name, u.email, u.phone
+      `SELECT p.id, p.tier, p.amount, p.utr, p.ref, p.created_at, p.reviewed_at, u.name, u.email, u.phone
        FROM membership_payments p JOIN users u ON u.id = p.user_id
        WHERE p.status = $1 ORDER BY p.created_at DESC LIMIT 200`,
       [tab],
@@ -49,7 +49,8 @@ export default async function AdminPayments({ searchParams }: { searchParams: Pr
       <PageHeader title="UPI payments" subtitle="CheckInn Club payments. Match each UTR with the “UPI Ref No.” in your bank or UPI app, then verify it." />
       {upiDemo() && (
         <p className="mb-4 rounded-xl bg-gold-300/40 px-4 py-3 text-sm">
-          Demo mode: the checkout uses a sample UPI ID, so no real money arrives and UTRs here are made up. To take real payments, add{" "}
+          Demo mode: Club payments go through CheckInn Pay, the demo gateway, and start the membership straight away (they show under
+          Verified). No real money arrives. To take real UPI payments instead, add{" "}
           <code>UPI_ID</code> (and optionally <code>UPI_NAME</code>) in Vercel → Settings → Environment Variables.
         </p>
       )}
@@ -65,7 +66,7 @@ export default async function AdminPayments({ searchParams }: { searchParams: Pr
           {club.map((p) => (
             <li key={p.id} className="flex flex-wrap items-center justify-between gap-4 px-5 py-4 text-sm">
               <div className="min-w-0">
-                <p className="font-mono text-lg font-bold tracking-wider">{p.utr}</p>
+                <p className="font-mono text-lg font-bold tracking-wider">{p.utr ?? p.ref}</p>
                 <p>
                   <b>{inr(p.amount)}</b> · {p.tier.charAt(0).toUpperCase() + p.tier.slice(1)} for a year
                 </p>

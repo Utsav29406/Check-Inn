@@ -256,3 +256,9 @@ html[data-opening="on"] body { animation: opening-ground 1.45s steps(1, end) bot
 @media (prefers-reduced-motion: reduce) {
   .welcome-tick-path { stroke-dashoffset: 0; }
 }
+
+/* ---------- CheckInn Pay window ---------- */
+.cpay-backdrop { animation: opening-fade-in 0.2s ease-out both; }
+.cpay-panel { animation: cpay-in 0.25s cubic-bezier(0.2, 0.8, 0.3, 1) both; }
+.cpay-success { animation: welcome-pop 0.45s cubic-bezier(0.3, 1.6, 0.5, 1) both; }
+@keyframes cpay-in { from { opacity: 0; transform: translateY(30px) scale(0.98); } }

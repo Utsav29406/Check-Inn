@@ -6,9 +6,11 @@ import { Loader2 } from "lucide-react";
 import { startMembership, submitMembershipUtr, type MembershipCheckout } from "@/app/actions";
 import { inr } from "@/lib/constants";
 import { UpiPayDialog } from "./UpiPayDialog";
+import { CheckInnPay } from "./CheckInnPay";
 
 /**
- * Join or upgrade a CheckInn Club plan: opens CheckInn's UPI checkout for the plan's price.
+ * Join or upgrade a CheckInn Club plan: opens CheckInn Pay (the demo gateway) until a real UPI ID is set, then
+ * CheckInn's UPI checkout to the owner's UPI ID.
  * Signed-out visitors go to sign in first.
  */
 export function JoinPlanButton({ tier, label, signedIn, className }: { tier: string; label: string; signedIn: boolean; className: string }) {
@@ -29,7 +31,16 @@ export function JoinPlanButton({ tier, label, signedIn, className }: { tier: str
 
   return (
     <>
-      {checkout && (
+      {checkout?.demo && (
+        <CheckInnPay
+          checkout={checkout}
+          onDone={(paid) => {
+            setCheckout(null);
+            if (paid) router.refresh();
+          }}
+        />
+      )}
+      {checkout && !checkout.demo && (
         <UpiPayDialog
           upi={checkout}
           summary={`CheckInn Club ${checkout.plan} · 1 year · ${inr(checkout.amount)}`}
