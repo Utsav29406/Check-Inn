@@ -2,7 +2,7 @@
 
 import { startTransition, useActionState, useEffect, useRef, useState } from "react";
 import { Minus, Plus, Loader2, CalendarDays, Crown, UserRound, X, Ticket, BadgePercent, Check } from "lucide-react";
-import { createBooking, releaseBooking, type CouponPreview, type FormState, type UpiRequest } from "@/app/actions";
+import { createBooking, releaseBooking, submitUtr, type CouponPreview, type FormState, type UpiRequest } from "@/app/actions";
 import { couponDiscount, inr } from "@/lib/constants";
 import { paperBlast } from "@/lib/paperBlast";
 import { UpiPayDialog } from "./UpiPayDialog";
@@ -117,6 +117,9 @@ export function BookingForm({ restaurant, payOnline, slots, dates, memberExtra, 
       <UpiPayDialog
         upi={upi}
         summary={`${restaurant.name} · ${fmtDate(date)}, ${fmtTime(slot)} · ${guestLabel}`}
+        onSubmit={(utr) => submitUtr(upi.code, utr)}
+        confirmLabel="Confirm my table"
+        closeWarning="Close without finishing? Your table will be released."
         onCancel={() => {
           releaseBooking(upi.code);
           setUpi(null);

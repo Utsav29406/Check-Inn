@@ -3,7 +3,6 @@ import { LogOut } from "lucide-react";
 import { LogoMark } from "@/components/Logo";
 import { AdminNav } from "@/components/admin/AdminNav";
 import { requireAdmin } from "@/lib/admin";
-import { paymentMode } from "@/lib/payments";
 import { query } from "@/lib/db";
 import { adminLogout } from "../actions";
 
@@ -11,7 +10,10 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminPanelLayout({ children }: { children: React.ReactNode }) {
   const admin = await requireAdmin();
-  const [{ pending }] = await query<{ pending: number }>("SELECT count(*)::int AS pending FROM listings WHERE status = 'pending'");
+  const [{ pending, payments }] = await query<{ pending: number; payments: number }>(
+    `SELECT (SELECT count(*) FROM listings WHERE status = 'pending')::int AS pending,
+            (SELECT count(*) FROM membership_payments WHERE status = 'review')::int AS payments`,
+  );
   return (
     <div className="flex flex-1 flex-col md:flex-row">
       <aside className="bg-brand-900 text-white md:sticky md:top-0 md:flex md:h-screen md:w-64 md:shrink-0 md:flex-col">
@@ -29,7 +31,7 @@ export default async function AdminPanelLayout({ children }: { children: React.R
             </button>
           </form>
         </div>
-        <AdminNav upi={paymentMode() === "upi"} pendingListings={pending} />
+        <AdminNav pendingListings={pending} paymentsToCheck={payments} />
         <div className="mt-auto hidden border-t border-white/10 p-4 md:block">
           <p className="truncate text-sm font-semibold">{admin.name}</p>
           <p className="truncate text-xs text-white/60">{admin.email}</p>

@@ -53,7 +53,7 @@ export function WelcomeToast() {
   const initial = (welcome.name.trim()[0] ?? "C").toUpperCase();
 
   return (
-    <div className="welcome-toast-wrap pointer-events-none fixed inset-x-0 top-0 z-[100] flex justify-center px-4 sm:justify-end sm:px-6">
+    <div className="welcome-toast-wrap pointer-events-none fixed inset-x-0 top-0 z-[65] flex justify-center px-4 sm:justify-end sm:px-6">
       <button
         type="button"
         role="status"

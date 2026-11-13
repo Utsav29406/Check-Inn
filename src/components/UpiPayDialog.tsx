@@ -3,22 +3,37 @@
 import { useEffect, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { Check, Clock, Copy, Loader2, Smartphone, X } from "lucide-react";
-import { submitUtr, type UpiRequest } from "@/app/actions";
+import type { UpiRequest } from "@/app/actions";
 import { inr } from "@/lib/constants";
 
 /**
- * Pay the booking fee by scanning our UPI QR (or opening a UPI app on phones), then enter the UTR to confirm.
- * A sheet on phones, a centred dialog from 768px up.
+ * CheckInn's UPI checkout: scan our QR (or open a UPI app on phones), pay, then enter the UTR.
+ * Used for Club membership (and table fees, if those are ever paid online). A sheet on phones, a centred dialog from 768px up.
+ * onSubmit sends the UTR and returns an error to show, if any; holdMinutes shows a countdown for a held table.
  */
-export function UpiPayDialog({ upi, summary, onCancel }: { upi: UpiRequest; summary: string; onCancel: () => void }) {
+export function UpiPayDialog({
+  upi,
+  summary,
+  onCancel,
+  onSubmit,
+  confirmLabel,
+  closeWarning,
+}: {
+  upi: Pick<UpiRequest, "amount" | "upiId" | "link" | "qr"> & { holdMinutes?: number };
+  summary: string;
+  onCancel: () => void;
+  onSubmit: (utr: string) => Promise<{ error?: string } | undefined | void>;
+  confirmLabel: string;
+  closeWarning: string;
+}) {
   const [utr, setUtr] = useState("");
   const [error, setError] = useState<string>();
   const [pending, start] = useTransition();
   const [copied, setCopied] = useState(false);
-  const [secondsLeft, setSecondsLeft] = useState(upi.holdMinutes * 60);
+  const [secondsLeft, setSecondsLeft] = useState((upi.holdMinutes ?? 0) * 60);
 
   const cancel = () => {
-    if (window.confirm("Close without finishing? Your table will be released.")) onCancel();
+    if (window.confirm(closeWarning)) onCancel();
   };
 
   useEffect(() => {
@@ -44,7 +59,7 @@ export function UpiPayDialog({ upi, summary, onCancel }: { upi: UpiRequest; summ
     e.preventDefault();
     setError(undefined);
     start(async () => {
-      const res = await submitUtr(upi.code, utr);
+      const res = await onSubmit(utr);
       if (res?.error) setError(res.error);
     });
   };
@@ -115,12 +130,14 @@ export function UpiPayDialog({ upi, summary, onCancel }: { upi: UpiRequest; summ
               disabled={!valid || pending}
               className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-brand-600 py-3.5 font-semibold text-white transition hover:bg-brand-700 disabled:opacity-50"
             >
-              {pending && <Loader2 className="h-4 w-4 animate-spin" />} Confirm my table
+              {pending && <Loader2 className="h-4 w-4 animate-spin" />} {confirmLabel}
             </button>
-            <p className="mt-3 flex items-center justify-center gap-1.5 text-xs text-muted">
-              <Clock className="h-3.5 w-3.5" />
-              {secondsLeft > 0 ? `Table held for ${mm}:${ss}` : "Hold time is over. Finish now to keep the table."}
-            </p>
+            {upi.holdMinutes ? (
+              <p className="mt-3 flex items-center justify-center gap-1.5 text-xs text-muted">
+                <Clock className="h-3.5 w-3.5" />
+                {secondsLeft > 0 ? `Table held for ${mm}:${ss}` : "Hold time is over. Finish now to keep the table."}
+              </p>
+            ) : null}
           </form>
         </div>
       </div>

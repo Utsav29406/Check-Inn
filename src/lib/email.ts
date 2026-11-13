@@ -493,3 +493,90 @@ export async function sendListingDecision(id: number) {
     console.error(`Listing decision email for ${id} failed:`, e);
   }
 }
+
+interface MembershipPayment {
+  id: number;
+  tier: string;
+  amount: number;
+  utr: string | null;
+  status: string;
+  name: string;
+  email: string;
+  membership_expires: string | null;
+}
+
+const getMembershipPayment = async (id: number) =>
+  (
+    await query<MembershipPayment>(
+      `SELECT p.id, p.tier, p.amount, p.utr, p.status, u.name, u.email, u.membership_expires
+       FROM membership_payments p JOIN users u ON u.id = p.user_id WHERE p.id = $1`,
+      [id],
+    )
+  )[0];
+
+const planName = (tier: string) => tier.charAt(0).toUpperCase() + tier.slice(1);
+const inrText = (n: number) => `₹${n.toLocaleString("en-IN")}`;
+
+/** The member sent a Club payment's UTR: tell them it's being checked, and ask the admins to check it. Never throws. */
+export async function sendMembershipPaymentReceived(id: number) {
+  if (!emailEnabled()) return;
+  try {
+    const p = await getMembershipPayment(id);
+    if (!p) return;
+    const rows: [string, string][] = [["Plan", `CheckInn Club ${planName(p.tier)}, 1 year`], ["Amount", inrText(p.amount)], ["UTR", p.utr ?? ""]];
+    const admins = await query<{ name: string; email: string }>("SELECT name, email FROM admins");
+    await Promise.all([
+      sendNotice({
+        to: p.email,
+        name: p.name,
+        subject: "We've got your CheckInn Club payment",
+        heading: "Payment received",
+        intro: `Thanks! We're matching your payment with our bank. Your ${planName(p.tier)} membership starts as soon as it's confirmed, usually within a few hours.`,
+        rows,
+        note: "We'll email you the moment it's active. Questions? Just reply to this email.",
+      }),
+      ...admins.map((a) =>
+        sendNotice({
+          to: a.email,
+          name: a.name,
+          subject: `Club payment to check: ${inrText(p.amount)}, UTR ${p.utr}`,
+          heading: "A Club payment is waiting",
+          intro: `${p.name} (${p.email}) paid for CheckInn Club ${planName(p.tier)}. Find the UTR in your bank or UPI app, then verify it.`,
+          rows,
+          link: { href: `${siteUrl()}/admin/payments`, label: "Check in admin" },
+          note: "You're getting this because you're a CheckInn admin.",
+        }),
+      ),
+    ]);
+  } catch (e) {
+    console.error(`Club payment emails for ${id} failed:`, e);
+  }
+}
+
+/** Tells the member their Club payment was confirmed (membership active) or couldn't be found. Never throws. */
+export async function sendMembershipDecision(id: number) {
+  if (!emailEnabled()) return;
+  try {
+    const p = await getMembershipPayment(id);
+    if (!p || (p.status !== "verified" && p.status !== "rejected")) return;
+    const ok = p.status === "verified";
+    await sendNotice({
+      to: p.email,
+      name: p.name,
+      subject: ok ? `Welcome to the CheckInn Club ${planName(p.tier)}` : "About your CheckInn Club payment",
+      heading: ok ? "Your membership is active" : "We couldn't find your payment",
+      intro: ok
+        ? `Your payment is confirmed. Your extra Club discount now applies automatically whenever you book while signed in.`
+        : `We couldn't find a payment of ${inrText(p.amount)} with UTR ${p.utr} in our bank statement, so your membership hasn't started.`,
+      rows: ok
+        ? [["Plan", `CheckInn Club ${planName(p.tier)}`], ["Active until", p.membership_expires ? fmtDate(p.membership_expires, { day: "numeric", month: "long", year: "numeric" }) : ""]]
+        : [["Plan", `CheckInn Club ${planName(p.tier)}`], ["UTR", p.utr ?? ""]],
+      link: ok ? { href: `${siteUrl()}/restaurants`, label: "Book a table" } : { href: `${siteUrl()}/membership`, label: "Try again" },
+      note: ok
+        ? "Thank you for joining. Questions? Just reply to this email."
+        : "If money left your account, reply to this email with a screenshot of the payment and we'll sort it out.",
+    });
+  } catch (e) {
+    console.error(`Club decision email for ${id} failed:`, e);
+  }
+}

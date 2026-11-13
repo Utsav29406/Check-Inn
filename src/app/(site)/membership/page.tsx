@@ -1,23 +1,36 @@
-import { Check, Crown, PartyPopper } from "lucide-react";
+import { Check, Clock, Crown, PartyPopper } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
+import { query } from "@/lib/db";
 import { PLANS, inr } from "@/lib/constants";
-import { fmtDate } from "@/lib/time";
-import { joinMembership } from "@/app/actions";
+import { fmtDate, nowInIndia } from "@/lib/time";
+import { upiEnabled } from "@/lib/payments";
 import { Reveal } from "@/components/Reveal";
+import { JoinPlanButton } from "@/components/JoinPlanButton";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "CheckInn Club | Membership" };
 
+const btn = "w-full rounded-xl py-3 font-semibold transition";
+const gold = "bg-gold-400 text-ink hover:bg-gold-300";
+const green = "bg-brand-600 text-white hover:bg-brand-700";
+
 const FAQ = [
   ["How does the extra discount work?", "Your club discount stacks on top of the restaurant's own CheckInn offer and is applied automatically to every booking you make while signed in."],
-  ["Can I upgrade my plan?", "Yes — choose a higher tier at any time. Your new benefits start immediately and your one-year term restarts from the upgrade date."],
+  ["How do I pay?", "By UPI: scan the QR (or open your UPI app on your phone), pay the plan's price, then enter the 12-digit UTR from your payment app. Your membership starts as soon as we confirm the payment, usually within a few hours, and we email you."],
+  ["Can I upgrade my plan?", "Yes — choose a higher tier at any time and pay its price. Your new benefits start once the payment is confirmed, and your one-year term restarts from then."],
   ["Is there a limit on bookings?", "No. Book as often as you like; the club discount applies to every reservation."],
 ];
 
-export default async function MembershipPage({ searchParams }: { searchParams: Promise<{ joined?: string }> }) {
-  const [user, { joined }] = await Promise.all([getCurrentUser(), searchParams]);
-  const current = user?.membership_tier ?? "none";
+export default async function MembershipPage() {
+  const user = await getCurrentUser();
+  // An expired plan counts as no plan: it can be joined again.
+  const active = Boolean(user && user.membership_tier !== "none" && user.membership_expires && user.membership_expires >= nowInIndia().date);
+  const current = active ? user!.membership_tier : "none";
   const currentIdx = PLANS.findIndex((p) => p.tier === current);
+  const [waiting] = user
+    ? await query<{ tier: string; amount: number; utr: string }>("SELECT tier, amount, utr FROM membership_payments WHERE user_id = $1 AND status = 'review' ORDER BY id DESC LIMIT 1", [user.id])
+    : [];
+  const open = upiEnabled();
 
   return (
     <>
@@ -35,14 +48,24 @@ export default async function MembershipPage({ searchParams }: { searchParams: P
       </section>
 
       <section className="mx-auto -mt-28 max-w-6xl px-4 sm:px-6">
-        {joined && user && current !== "none" && (
+        {waiting ? (
           <div className="relative mb-8 flex items-center gap-4 rounded-2xl bg-white p-5 shadow-lg ring-1 ring-gold-400">
-            <PartyPopper className="h-8 w-8 shrink-0 text-gold-500" />
+            <Clock className="h-8 w-8 shrink-0 text-gold-500" />
             <p>
-              <b>Welcome to the club!</b> Your {PLANS[currentIdx].name} membership is active until{" "}
-              {fmtDate(user.membership_expires!, { day: "numeric", month: "long", year: "numeric" })}.
+              <b>Payment received, we&apos;re confirming it.</b> Your {PLANS.find((p) => p.tier === waiting.tier)?.name} membership ({inr(waiting.amount)}, UTR{" "}
+              {waiting.utr}) starts as soon as it&apos;s matched with our bank, usually within a few hours. We&apos;ll email you.
             </p>
           </div>
+        ) : (
+          active && (
+            <div className="relative mb-8 flex items-center gap-4 rounded-2xl bg-white p-5 shadow-lg ring-1 ring-gold-400">
+              <PartyPopper className="h-8 w-8 shrink-0 text-gold-500" />
+              <p>
+                <b>You&apos;re in the club!</b> Your {PLANS[currentIdx].name} membership is active until{" "}
+                {fmtDate(user!.membership_expires!, { day: "numeric", month: "long", year: "numeric" })}.
+              </p>
+            </div>
+          )
         )}
         <div className="grid gap-6 md:grid-cols-3">
           {PLANS.map((p, i) => {
@@ -65,21 +88,26 @@ export default async function MembershipPage({ searchParams }: { searchParams: P
                       </li>
                     ))}
                   </ul>
-                  <form action={joinMembership} className="mt-8">
-                    <input type="hidden" name="tier" value={p.tier} />
-                    <button
-                      disabled={isCurrent || i < currentIdx}
-                      className={`w-full rounded-xl py-3 font-semibold transition disabled:cursor-default disabled:opacity-60 ${p.popular ? "bg-gold-400 text-ink hover:bg-gold-300" : "bg-brand-600 text-white hover:bg-brand-700"}`}
-                    >
-                      {isCurrent ? "Your current plan" : i < currentIdx ? "Included in your plan" : current !== "none" ? `Upgrade to ${p.name}` : `Join ${p.name}`}
-                    </button>
-                  </form>
+                  <div className="mt-8">
+                    {isCurrent || i < currentIdx || !open || waiting ? (
+                      <button disabled className={`${btn} ${p.popular ? gold : green} cursor-default opacity-60`}>
+                        {isCurrent ? "Your current plan" : i < currentIdx ? "Included in your plan" : waiting ? "Payment being confirmed" : "Joining opens soon"}
+                      </button>
+                    ) : (
+                      <JoinPlanButton
+                        tier={p.tier}
+                        signedIn={Boolean(user)}
+                        label={`${current !== "none" ? `Upgrade to ${p.name}` : `Join ${p.name}`} · ${inr(p.price)}`}
+                        className={`${btn} ${p.popular ? gold : green} disabled:opacity-60`}
+                      />
+                    )}
+                  </div>
                 </div>
               </Reveal>
             );
           })}
         </div>
-        {!user && <p className="mt-6 text-center text-sm text-muted">You&apos;ll be asked to sign in before joining.</p>}
+        {open && !user && <p className="mt-6 text-center text-sm text-muted">You&apos;ll be asked to sign in before joining. Pay by any UPI app.</p>}
       </section>
 
       <section className="mx-auto max-w-3xl px-4 py-20 sm:px-6">

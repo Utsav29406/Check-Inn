@@ -218,3 +218,17 @@ CREATE INDEX IF NOT EXISTS idx_listings_status ON listings (status, created_at);
 -- registered with that email, and when an admin's password changes.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS sessions_valid_after TIMESTAMPTZ;
 ALTER TABLE admins ADD COLUMN IF NOT EXISTS sessions_valid_after TIMESTAMPTZ;
+
+-- CheckInn Club payments, made by UPI to the owner's UPI ID. The member enters the UTR (pending → review), and an admin
+-- matches it with the bank statement: verified starts or extends the membership; rejected doesn't.
+CREATE TABLE IF NOT EXISTS membership_payments (
+  id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  user_id     BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  tier        VARCHAR(10) NOT NULL CHECK (tier IN ('silver', 'gold', 'platinum')),
+  amount      INT NOT NULL CHECK (amount > 0),
+  utr         VARCHAR(12) UNIQUE,
+  status      VARCHAR(10) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'review', 'verified', 'rejected')),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  reviewed_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS membership_payments_status ON membership_payments (status, created_at DESC);

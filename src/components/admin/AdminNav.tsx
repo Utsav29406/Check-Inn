@@ -12,16 +12,16 @@ const ITEMS = [
   { href: "/admin/listings", label: "Listings", icon: ClipboardCheck },
   { href: "/admin/offers", label: "Offers", icon: TicketPercent },
   { href: "/admin/users", label: "Users & partners", icon: Users },
-  { href: "/admin/payments", label: "UPI payments", icon: IndianRupee },
+  { href: "/admin/payments", label: "Payments", icon: IndianRupee },
 ];
 
 /**
- * Sidebar from 768px up, a scrollable tab row on phones. "UPI payments" only shows while UPI QR payments are on;
- * Listings shows how many restaurants are waiting for approval.
+ * Sidebar from 768px up, a scrollable tab row on phones. Listings and Payments show how many are waiting to be checked.
  */
-export function AdminNav({ upi, pendingListings = 0 }: { upi: boolean; pendingListings?: number }) {
+export function AdminNav({ pendingListings = 0, paymentsToCheck = 0 }: { pendingListings?: number; paymentsToCheck?: number }) {
   const pathname = usePathname();
-  const items = upi ? ITEMS : ITEMS.filter((i) => i.href !== "/admin/payments");
+  const items = ITEMS;
+  const badge: Record<string, number> = { "/admin/listings": pendingListings, "/admin/payments": paymentsToCheck };
   const active = (href: string) => (href === "/admin" ? pathname === "/admin" : pathname.startsWith(href));
   return (
     <nav className="no-scrollbar flex gap-1 overflow-x-auto px-3 pb-3 md:flex-col md:overflow-visible md:px-3 md:pb-0">
@@ -35,9 +35,7 @@ export function AdminNav({ upi, pendingListings = 0 }: { upi: boolean; pendingLi
         >
           <Icon className={`h-4.5 w-4.5 ${active(href) ? "text-gold-300" : ""}`} />
           {label}
-          {href === "/admin/listings" && pendingListings > 0 && (
-            <span className="ml-auto rounded-full bg-gold-400 px-2 text-[11px] font-bold text-brand-900">{pendingListings}</span>
-          )}
+          {badge[href] > 0 && <span className="ml-auto rounded-full bg-gold-400 px-2 text-[11px] font-bold text-brand-900">{badge[href]}</span>}
         </Link>
       ))}
     </nav>

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/admin";
-import { paymentMode } from "@/lib/payments";
+import { upiEnabled } from "@/lib/payments";
 import { query } from "@/lib/db";
 import { inr } from "@/lib/constants";
 import { addDays, fmtDate, fmtTime, nowInIndia } from "@/lib/time";
@@ -32,7 +32,7 @@ export default async function AdminDashboard() {
          (SELECT COALESCE(sum(guests), 0) FROM bookings WHERE status = 'confirmed' AND booking_date = $1)::int AS today_guests,
          (SELECT count(*) FROM bookings WHERE status = 'confirmed' AND booking_date BETWEEN $1 AND $2)::int AS week_bookings,
          (SELECT COALESCE(sum(amount), 0) FROM bookings WHERE status = 'confirmed' AND payment_status = 'due' AND booking_date >= $1)::int AS fees_due,
-         (SELECT count(*) FROM bookings WHERE payment_status = 'review')::int AS upi_to_check,
+         (SELECT count(*) FROM membership_payments WHERE status = 'review')::int AS upi_to_check,
          (SELECT count(*) FROM listings WHERE status = 'pending')::int AS new_partners,
          (SELECT count(*) FROM users)::int AS users`,
       [today, addDays(today, 6)],
@@ -52,7 +52,7 @@ export default async function AdminDashboard() {
         <StatCard label="Today" value={stats.today_bookings} hint={`${stats.today_guests} guests`} href={`/admin/bookings?date=${today}`} />
         <StatCard label="Next 7 days" value={stats.week_bookings} hint="confirmed bookings" href="/admin/bookings" />
         <StatCard label="Fees due" value={inr(stats.fees_due)} hint="to collect at restaurants" href="/admin/bookings?pay=due" />
-        {paymentMode() === "upi" && <StatCard label="UPI to check" value={stats.upi_to_check} href="/admin/payments" />}
+        {(upiEnabled() || stats.upi_to_check > 0) && <StatCard label="Club payments" value={stats.upi_to_check} hint="to check" href="/admin/payments" />}
         <StatCard label="New listings" value={stats.new_partners} hint="waiting for approval" href="/admin/listings" />
         <StatCard label="Users" value={stats.users} href="/admin/users" />
       </div>

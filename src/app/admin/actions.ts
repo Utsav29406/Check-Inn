@@ -10,7 +10,7 @@ import { adminCount, createAdminSession, destroyAdminSession, requireAdmin } fro
 import { buildSlots, getRestaurant } from "@/lib/restaurants";
 import { CITIES } from "@/lib/constants";
 import { nowInIndia } from "@/lib/time";
-import { emailEnabled, sendBookingReminder, sendCancellationEmails, sendListingDecision, sendLockoutAlert, sendSignInAlert, sendTestConfirmation } from "@/lib/email";
+import { emailEnabled, sendBookingReminder, sendCancellationEmails, sendListingDecision, sendLockoutAlert, sendMembershipDecision, sendSignInAlert, sendTestConfirmation } from "@/lib/email";
 import { awardScratchCard } from "@/lib/offers";
 import { LOGIN_LIMIT, clearAttempts, clientIp, recentAttempts, recordAttempt, requestSummary } from "@/lib/limits";
 import type { FormState } from "@/app/actions";
@@ -181,6 +181,35 @@ export async function reviewPayment(fd: FormData) {
       [code],
     );
   }
+  refresh();
+}
+
+/**
+ * A CheckInn Club payment: "verify" (found in the bank statement) starts the membership for a year (a renewal of the
+ * same plan adds a year to what's left); "reject" leaves the membership as it was. The member is emailed either way.
+ */
+export async function reviewMembershipPayment(fd: FormData) {
+  await requireAdmin();
+  const id = Number(fd.get("id"));
+  const verify = str(fd, "decision") === "verify";
+  const today = nowInIndia().date;
+  const done = await transaction(async (client) => {
+    const {
+      rows: [p],
+    } = await client.query<{ user_id: number; tier: string; status: string }>("SELECT user_id, tier, status FROM membership_payments WHERE id = $1 FOR UPDATE", [id]);
+    if (!p || p.status !== "review") return false;
+    await client.query("UPDATE membership_payments SET status = $2, reviewed_at = now() WHERE id = $1", [id, verify ? "verified" : "rejected"]);
+    if (verify) {
+      await client.query(
+        `UPDATE users SET membership_tier = $2::varchar,
+           membership_expires = (CASE WHEN membership_tier = $2::varchar AND membership_expires >= $3::date THEN membership_expires ELSE $3::date END + INTERVAL '1 year')::date
+         WHERE id = $1`,
+        [p.user_id, p.tier, today],
+      );
+    }
+    return true;
+  });
+  if (done) after(() => sendMembershipDecision(id));
   refresh();
 }
 

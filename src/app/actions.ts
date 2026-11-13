@@ -6,11 +6,11 @@ import QRCode from "qrcode";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
-import { query, transaction } from "@/lib/db";
+import { db, query, transaction } from "@/lib/db";
 import { createSession, destroySession, setWelcome, getCurrentUser, safeNext, validBookingToken } from "@/lib/auth";
 import { HOLDS_SEAT, PAYMENT_HOLD_MINUTES, buildSlots } from "@/lib/restaurants";
-import { paymentMode, upiLink } from "@/lib/payments";
-import { sendBookingConfirmation, sendCancellationEmails, sendListingReceived, sendLockoutAlert, sendSignInAlert } from "@/lib/email";
+import { paymentMode, upiEnabled, upiLink } from "@/lib/payments";
+import { sendBookingConfirmation, sendCancellationEmails, sendListingReceived, sendLockoutAlert, sendMembershipPaymentReceived, sendSignInAlert } from "@/lib/email";
 import { BOOKING_LIMIT, LOGIN_LIMIT, clearAttempts, clientIp, recentAttempts, recordAttempt, requestSummary } from "@/lib/limits";
 import { CITIES, PLANS, memberExtraDiscount } from "@/lib/constants";
 import { parseLocation, savePhoto } from "@/lib/images";
@@ -329,18 +329,65 @@ export async function scratchMyCard(cardId: number): Promise<{ reveal?: ScratchR
   return { reveal };
 }
 
-export async function joinMembership(fd: FormData) {
-  const tier = str(fd, "tier");
+/** What the membership page needs to show CheckInn's UPI checkout for a plan. */
+export interface MembershipCheckout {
+  id: number;
+  plan: string;
+  amount: number;
+  upiId: string;
+  link: string;
+  qr: string;
+}
+
+/** Whether a member's plan is still running today. */
+const activeTier = (u: { membership_tier: string; membership_expires: string | null }) =>
+  u.membership_tier !== "none" && Boolean(u.membership_expires && u.membership_expires >= nowInIndia().date) ? u.membership_tier : "none";
+
+/**
+ * Join or upgrade the CheckInn Club: opens a payment for the plan's yearly price, paid by UPI to the owner's UPI ID.
+ * The membership starts once an admin finds the payment (Admin → UPI payments).
+ */
+export async function startMembership(tier: string): Promise<{ checkout?: MembershipCheckout; error?: string }> {
   const user = await getCurrentUser();
-  if (!user) redirect("/login?next=/membership");
-  if (!PLANS.some((p) => p.tier === tier)) redirect("/membership");
-  // No payment gateway yet — membership is activated immediately for one year.
-  await query(
-    "UPDATE users SET membership_tier = $1, membership_expires = ((now() AT TIME ZONE 'Asia/Kolkata')::date + INTERVAL '1 year')::date WHERE id = $2",
-    [tier, user.id],
+  if (!user) return { error: "Please sign in to join." };
+  if (!upiEnabled()) return { error: "Joining opens soon. Please check back in a day or two." };
+  const plan = PLANS.find((p) => p.tier === tier);
+  if (!plan) return { error: "Please pick a plan." };
+  const current = PLANS.findIndex((p) => p.tier === activeTier(user));
+  if (current >= PLANS.indexOf(plan)) return { error: `Your plan already includes ${plan.name}.` };
+  const [waiting] = await query<{ tier: string }>("SELECT tier FROM membership_payments WHERE user_id = $1 AND status = 'review'", [user.id]);
+  if (waiting) return { error: "We're still checking your last payment. Your membership starts as soon as it's confirmed, usually within a few hours." };
+  // Reuse an unfinished payment for the same plan, so going back and forth doesn't pile up rows.
+  let [row] = await query<{ id: number }>(
+    "UPDATE membership_payments SET amount = $3 WHERE id = (SELECT max(id) FROM membership_payments WHERE user_id = $1 AND tier = $2 AND status = 'pending') RETURNING id",
+    [user.id, plan.tier, plan.price],
   );
-  revalidatePath("/", "layout");
-  redirect("/membership?joined=1");
+  if (!row) [row] = await query<{ id: number }>("INSERT INTO membership_payments (user_id, tier, amount) VALUES ($1, $2, $3) RETURNING id", [user.id, plan.tier, plan.price]);
+  const link = upiLink(plan.price, `CheckInn Club ${plan.name} M${row.id}`);
+  const qr = await QRCode.toString(link, { type: "svg", margin: 1, errorCorrectionLevel: "M", color: { dark: "#061f19", light: "#ffffff" } });
+  return { checkout: { id: row.id, plan: plan.name, amount: plan.price, upiId: process.env.UPI_ID!, link, qr } };
+}
+
+/** The member paid and entered the UTR: the payment waits for an admin to match it with the bank statement. */
+export async function submitMembershipUtr(id: number, utr: string): Promise<{ error?: string } | undefined> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Please sign in again." };
+  const clean = utr.replace(/\s/g, "");
+  if (!/^\d{12}$/.test(clean)) return { error: "Enter the 12-digit UTR (UPI reference number) shown in your payment app." };
+  const [{ used }] = await query<{ used: number }>("SELECT count(*)::int AS used FROM bookings WHERE utr = $1", [clean]);
+  if (used) return { error: "This UTR has already been used. Check the number in your payment app." };
+  try {
+    const { rowCount } = await db().query(
+      "UPDATE membership_payments SET utr = $3, status = 'review' WHERE id = $1 AND user_id = $2 AND status = 'pending'",
+      [id, user.id, clean],
+    );
+    if (!rowCount) return { error: "This payment was already sent. Reload the page to see where it is." };
+  } catch (e) {
+    if ((e as { code?: string }).code === "23505") return { error: "This UTR has already been used. Check the number in your payment app." };
+    throw e;
+  }
+  after(() => sendMembershipPaymentReceived(id));
+  revalidatePath("/membership");
 }
 
 /**
