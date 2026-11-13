@@ -19,7 +19,7 @@ export function UpiPayDialog({
   confirmLabel,
   closeWarning,
 }: {
-  upi: Pick<UpiRequest, "amount" | "upiId" | "link" | "qr"> & { holdMinutes?: number };
+  upi: Pick<UpiRequest, "amount" | "upiId" | "link" | "qr"> & { holdMinutes?: number; demo?: boolean };
   summary: string;
   onCancel: () => void;
   onSubmit: (utr: string) => Promise<{ error?: string } | undefined | void>;
@@ -85,6 +85,12 @@ export function UpiPayDialog({
         </div>
 
         <div className="space-y-5 p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
+          {upi.demo && (
+            <p className="rounded-xl bg-gold-300/40 px-4 py-3 text-sm">
+              <b>Demo payment.</b> This uses a sample UPI ID, so your UPI app will open but can&apos;t send money. To try it, enter any 12-digit
+              number as the UTR.
+            </p>
+          )}
           <div>
             <p className="text-sm font-semibold">1. Scan and pay exactly {inr(upi.amount)}</p>
             <div

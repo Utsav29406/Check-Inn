@@ -9,7 +9,7 @@ import { after } from "next/server";
 import { db, query, transaction } from "@/lib/db";
 import { createSession, destroySession, setWelcome, getCurrentUser, safeNext, validBookingToken } from "@/lib/auth";
 import { HOLDS_SEAT, PAYMENT_HOLD_MINUTES, buildSlots } from "@/lib/restaurants";
-import { paymentMode, upiEnabled, upiLink } from "@/lib/payments";
+import { paymentMode, upiDemo, upiEnabled, upiId, upiLink } from "@/lib/payments";
 import { sendBookingConfirmation, sendCancellationEmails, sendListingReceived, sendLockoutAlert, sendMembershipPaymentReceived, sendSignInAlert } from "@/lib/email";
 import { BOOKING_LIMIT, LOGIN_LIMIT, clearAttempts, clientIp, recentAttempts, recordAttempt, requestSummary } from "@/lib/limits";
 import { CITIES, PLANS, memberExtraDiscount } from "@/lib/constants";
@@ -232,7 +232,7 @@ export async function createBooking(_: FormState, fd: FormData): Promise<FormSta
     const link = upiLink(booking.amount, `CheckInn ${booking.code}`);
     const qr = await QRCode.toString(link, { type: "svg", margin: 1, errorCorrectionLevel: "M", color: { dark: "#061f19", light: "#ffffff" } });
     return {
-      upi: { code: booking.code, amount: booking.amount, upiId: process.env.UPI_ID!, link, qr, holdMinutes: PAYMENT_HOLD_MINUTES },
+      upi: { code: booking.code, amount: booking.amount, upiId: upiId(), link, qr, holdMinutes: PAYMENT_HOLD_MINUTES },
     };
   }
   after(() => sendBookingConfirmation(booking.code));
@@ -337,6 +337,8 @@ export interface MembershipCheckout {
   upiId: string;
   link: string;
   qr: string;
+  /** Demo mode: a made-up UPI ID, so no real payment is possible. */
+  demo: boolean;
 }
 
 /** Whether a member's plan is still running today. */
@@ -365,7 +367,7 @@ export async function startMembership(tier: string): Promise<{ checkout?: Member
   if (!row) [row] = await query<{ id: number }>("INSERT INTO membership_payments (user_id, tier, amount) VALUES ($1, $2, $3) RETURNING id", [user.id, plan.tier, plan.price]);
   const link = upiLink(plan.price, `CheckInn Club ${plan.name} M${row.id}`);
   const qr = await QRCode.toString(link, { type: "svg", margin: 1, errorCorrectionLevel: "M", color: { dark: "#061f19", light: "#ffffff" } });
-  return { checkout: { id: row.id, plan: plan.name, amount: plan.price, upiId: process.env.UPI_ID!, link, qr } };
+  return { checkout: { id: row.id, plan: plan.name, amount: plan.price, upiId: upiId(), link, qr, demo: upiDemo() } };
 }
 
 /** The member paid and entered the UTR: the payment waits for an admin to match it with the bank statement. */

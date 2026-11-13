@@ -3,7 +3,7 @@ import { requireAdmin } from "@/lib/admin";
 import { query } from "@/lib/db";
 import { inr } from "@/lib/constants";
 import { fmtDate, fmtTime } from "@/lib/time";
-import { upiEnabled } from "@/lib/payments";
+import { upiDemo } from "@/lib/payments";
 import { Card, PageHeader, smallBtn } from "@/components/admin/ui";
 import { reviewMembershipPayment, reviewPayment } from "../../actions";
 import type { Booking } from "@/lib/types";
@@ -47,9 +47,10 @@ export default async function AdminPayments({ searchParams }: { searchParams: Pr
   return (
     <>
       <PageHeader title="UPI payments" subtitle="CheckInn Club payments. Match each UTR with the “UPI Ref No.” in your bank or UPI app, then verify it." />
-      {!upiEnabled() && (
+      {upiDemo() && (
         <p className="mb-4 rounded-xl bg-gold-300/40 px-4 py-3 text-sm">
-          Club joining is closed until your UPI ID is set: add <code>UPI_ID</code> (and optionally <code>UPI_NAME</code>) in Vercel → Settings → Environment Variables.
+          Demo mode: the checkout uses a sample UPI ID, so no real money arrives and UTRs here are made up. To take real payments, add{" "}
+          <code>UPI_ID</code> (and optionally <code>UPI_NAME</code>) in Vercel → Settings → Environment Variables.
         </p>
       )}
       <div className="mb-4 flex max-w-md gap-1 rounded-xl bg-white p-1 ring-1 ring-black/5">
