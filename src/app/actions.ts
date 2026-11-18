@@ -15,6 +15,7 @@ import { sendBookingConfirmation, sendCancellationEmails, sendListingReceived, s
 import { BOOKING_LIMIT, LOGIN_LIMIT, clearAttempts, clientIp, recentAttempts, recordAttempt, requestSummary } from "@/lib/limits";
 import { CITIES, PLANS, memberExtraDiscount } from "@/lib/constants";
 import { parseLocation, savePhoto } from "@/lib/images";
+import { findOrCreateGoogleUser, googleConfig, verifyGoogleCredential } from "@/lib/google";
 import { awardScratchCard, bestCoupon, scratchCard } from "@/lib/offers";
 import { getFestival, offerFestival } from "@/lib/festival";
 import { addDays, nowInIndia } from "@/lib/time";
@@ -92,6 +93,32 @@ export async function login(_: FormState, fd: FormData): Promise<FormState> {
   const req = await requestSummary();
   after(() => sendSignInAlert({ to: email, name: user.name, method: "Email and password", ...req }));
   redirect(safeNext(str(fd, "next")));
+}
+
+/**
+ * Sign-in with Google's own button, inside the installed app: Google hands the page an ID token (from its account
+ * picker, which stays in the app) instead of taking the visitor away to its sign-in page.
+ */
+export async function googleButtonSignIn(credential: string, next: string): Promise<FormState> {
+  const config = googleConfig();
+  if (!config || typeof credential !== "string" || credential.length > 4096) return { error: "Google sign-in isn't available. Please use your email." };
+  let profile;
+  try {
+    profile = await verifyGoogleCredential(credential, config.clientId);
+  } catch (e) {
+    console.error("Google button sign-in failed:", e);
+    return { error: "Google sign-in didn't work. Please try again, or use your email instead." };
+  }
+  const userId = await findOrCreateGoogleUser(profile);
+  await createSession(userId);
+  // Sign-in alert to the account's email (the user's own address, which may differ from the Google one if linked).
+  const [u] = await query<{ name: string; email: string }>("SELECT name, email FROM users WHERE id = $1", [userId]);
+  if (u) {
+    await setWelcome("google", u.name);
+    const where = await requestSummary();
+    after(() => sendSignInAlert({ to: u.email, name: u.name, method: "Continue with Google", ...where }));
+  }
+  redirect(safeNext(next));
 }
 
 export async function logout() {

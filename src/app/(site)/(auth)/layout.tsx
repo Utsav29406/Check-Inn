@@ -7,7 +7,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
     <>
       {children}
       <Suspense>
-        <AuthScreen googleEnabled={Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET)} />
+        <AuthScreen googleEnabled={Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET)} googleClientId={process.env.GOOGLE_CLIENT_ID} />
       </Suspense>
     </>
   );

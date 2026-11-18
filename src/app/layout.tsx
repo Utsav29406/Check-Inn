@@ -10,7 +10,7 @@ const playfair = Playfair_Display({ subsets: ["latin"], variable: "--font-playfa
 
 export const metadata: Metadata = {
   title: "CheckInn | Premium Restaurant Booking & Fine Dining Club",
-  icons: { icon: "/favicon.svg", apple: "/apple-icon.png" },
+  icons: { icon: "/favicon.svg", apple: "/apple-icon.png?v=2" },
   // Opened from the home screen on iPhones: full screen, named CheckInn (the icon is app/apple-icon.png, listed under icons).
   appleWebApp: { capable: true, title: "CheckInn", statusBarStyle: "default" },
   description: "Reserve tables at the finest restaurants, unlock flat discounts and join the CheckInn dining club.",

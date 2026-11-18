@@ -1,5 +1,5 @@
 import "server-only";
-import { decodeJwt } from "jose";
+import { createRemoteJWKSet, decodeJwt, jwtVerify, type JWTPayload } from "jose";
 import { query } from "./db";
 
 const AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
@@ -78,12 +78,28 @@ export async function exchangeCode(opts: {
   const issuerOk = claims.iss === "https://accounts.google.com" || claims.iss === "accounts.google.com";
   const audienceOk = claims.aud === opts.clientId || (Array.isArray(claims.aud) && claims.aud.includes(opts.clientId));
   if (!issuerOk || !audienceOk || !claims.exp || claims.exp * 1000 < Date.now()) throw new Error("Invalid Google ID token");
+  return profileOf(claims);
+}
+
+function profileOf(claims: JWTPayload): GoogleProfile {
   if (claims.email_verified !== true || typeof claims.email !== "string" || !claims.sub) {
     throw new Error("Google account has no verified email");
   }
   const email = claims.email.toLowerCase();
   const name = typeof claims.name === "string" && claims.name.trim() ? claims.name.trim() : email.split("@")[0];
   return { sub: claims.sub, email, name };
+}
+
+const GOOGLE_KEYS = createRemoteJWKSet(new URL("https://www.googleapis.com/oauth2/v3/certs"));
+
+/**
+ * The ID token from Google's own sign-in button (used in the installed app, where leaving for Google's page would
+ * open Chrome). It comes through the browser rather than straight from Google, so its signature is checked against
+ * Google's published keys, as well as who issued it, for which app, and that it hasn't expired.
+ */
+export async function verifyGoogleCredential(credential: string, clientId: string): Promise<GoogleProfile> {
+  const { payload } = await jwtVerify(credential, GOOGLE_KEYS, { issuer: ["https://accounts.google.com", "accounts.google.com"], audience: clientId });
+  return profileOf(payload);
 }
 
 /**

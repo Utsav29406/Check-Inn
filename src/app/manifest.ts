@@ -1,6 +1,8 @@
 import type { MetadataRoute } from "next";
 
 /*
+ * Icons carry ?v=N: bump it when they change, so installed apps fetch the new ones.
+ *
  * Makes CheckInn installable from the browser ("Install app" / "Add to Home Screen"): it then opens full screen from
  * its own icon, like a store app.
  */
@@ -18,15 +20,15 @@ export default function manifest(): MetadataRoute.Manifest {
     theme_color: "#061f19",
     categories: ["food", "lifestyle"],
     icons: [
-      { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
-      { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
-      { src: "/icons/icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+      { src: "/icons/icon-192.png?v=2", sizes: "192x192", type: "image/png", purpose: "any" },
+      { src: "/icons/icon-512.png?v=2", sizes: "512x512", type: "image/png", purpose: "any" },
+      { src: "/icons/icon-maskable-512.png?v=2", sizes: "512x512", type: "image/png", purpose: "maskable" },
     ],
     // Long-press the home-screen icon for these.
     shortcuts: [
-      { name: "Find a table", url: "/restaurants", icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }] },
-      { name: "My bookings", url: "/bookings", icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }] },
-      { name: "Offers", url: "/offers", icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }] },
+      { name: "Find a table", url: "/restaurants", icons: [{ src: "/icons/icon-192.png?v=2", sizes: "192x192" }] },
+      { name: "My bookings", url: "/bookings", icons: [{ src: "/icons/icon-192.png?v=2", sizes: "192x192" }] },
+      { name: "Offers", url: "/offers", icons: [{ src: "/icons/icon-192.png?v=2", sizes: "192x192" }] },
     ],
   };
 }
