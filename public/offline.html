@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#061f19">
+<title>CheckInn — You're offline</title>
+<style>
+  html, body { height: 100%; margin: 0; }
+  body { display: grid; place-items: center; background: radial-gradient(120% 120% at 100% 0%, #1d6650 0%, #061f19 60%); color: #faf8f3; font-family: system-ui, sans-serif; text-align: center; padding: 24px; box-sizing: border-box; }
+  svg { width: 72px; height: 72px; }
+  h1 { font-family: Georgia, serif; font-weight: 700; font-size: 28px; margin: 18px 0 8px; }
+  p { color: rgb(250 248 243 / 0.7); margin: 0 auto 24px; max-width: 30ch; line-height: 1.5; }
+  button { font: inherit; font-weight: 600; color: #061f19; background: #d6bf8a; border: 0; border-radius: 999px; padding: 11px 24px; }
+</style>
+</head>
+<body>
+  <main>
+    <svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="23" fill="#12493b"/><path d="M18 27.5l4 4 8-8.5" fill="none" stroke="#e9dcb8" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M11 33a13 13 0 0 1 26 0z" fill="#d6bf8a" opacity=".35"/><rect x="8" y="33" width="32" height="3" rx="1.5" fill="#e9dcb8"/></svg>
+    <h1>You're offline</h1>
+    <p>CheckInn needs a connection to show restaurants, free tables and your bookings. Check your signal and try again.</p>
+    <button type="button" onclick="location.reload()">Try again</button>
+  </main>
+</body>
+</html>

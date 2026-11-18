@@ -262,3 +262,9 @@ html[data-opening="on"] body { animation: opening-ground 1.45s steps(1, end) bot
 .cpay-panel { animation: cpay-in 0.25s cubic-bezier(0.2, 0.8, 0.3, 1) both; }
 .cpay-success { animation: welcome-pop 0.45s cubic-bezier(0.3, 1.6, 0.5, 1) both; }
 @keyframes cpay-in { from { opacity: 0; transform: translateY(30px) scale(0.98); } }
+
+/* ---------- Install the app (phones) ---------- */
+.install-card { animation: install-drop 0.35s ease-out both; }
+.install-sheet { animation: install-up 0.3s ease-out both; }
+@keyframes install-drop { from { opacity: 0; transform: translateY(-16px); } }
+@keyframes install-up { from { transform: translateY(100%); } }
