@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
-import { startMembership, submitMembershipUtr, type MembershipCheckout } from "@/app/actions";
+import { payMembership, startMembership, submitMembershipUtr, type MembershipCheckout } from "@/app/actions";
 import { inr } from "@/lib/constants";
 import { UpiPayDialog } from "./UpiPayDialog";
 import { CheckInnPay } from "./CheckInnPay";
@@ -33,7 +33,11 @@ export function JoinPlanButton({ tier, label, signedIn, className }: { tier: str
     <>
       {checkout?.demo && (
         <CheckInnPay
-          checkout={checkout}
+          amount={checkout.amount}
+          label={`CheckInn Club ${checkout.plan} · 1 year`}
+          qr={checkout.qr}
+          pay={(body) => payMembership(checkout.id, body)}
+          success="Welcome to the Club!"
           onDone={(paid) => {
             setCheckout(null);
             if (paid) router.refresh();

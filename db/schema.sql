@@ -234,3 +234,5 @@ CREATE TABLE IF NOT EXISTS membership_payments (
 CREATE INDEX IF NOT EXISTS membership_payments_status ON membership_payments (status, created_at DESC);
 -- CheckInn Pay (the demo gateway) pays straight away; its reference (e.g. CPAY-CARD-VISA-1111-…) is kept here.
 ALTER TABLE membership_payments ADD COLUMN IF NOT EXISTS ref VARCHAR(60);
+-- Table fees paid with CheckInn Pay (the demo gateway) keep its reference here.
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS payment_ref VARCHAR(60);

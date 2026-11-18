@@ -1,18 +1,18 @@
 "use client";
 
 import { startTransition, useActionState, useEffect, useRef, useState } from "react";
-import { Minus, Plus, Loader2, CalendarDays, Crown, UserRound, X, Ticket, BadgePercent, Check } from "lucide-react";
-import { createBooking, releaseBooking, submitUtr, type CouponPreview, type FormState, type UpiRequest } from "@/app/actions";
+import { useRouter } from "next/navigation";
+import { Minus, Plus, Loader2, CalendarDays, Crown, UserRound, X, Ticket, BadgePercent, Check, ShieldCheck, Store } from "lucide-react";
+import { createBooking, payBooking, releaseBooking, submitUtr, type CouponPreview, type FormState, type UpiRequest } from "@/app/actions";
 import { couponDiscount, inr } from "@/lib/constants";
 import { paperBlast } from "@/lib/paperBlast";
 import { UpiPayDialog } from "./UpiPayDialog";
+import { CheckInnPay } from "./CheckInnPay";
 import { fmtDate, fmtTime, nowInIndia } from "@/lib/time";
 
 interface Props {
   /** fee: table booking fee per guest, in rupees. */
   restaurant: { id: number; name: string; capacity: number; discount: number; fee: number };
-  /** Collect the fee now by UPI QR; otherwise it's paid at the restaurant. */
-  payOnline: boolean;
   slots: string[];
   dates: string[];
   memberExtra: number;
@@ -26,7 +26,7 @@ interface Props {
   onClose?: () => void;
 }
 
-export function BookingForm({ restaurant, payOnline, slots, dates, memberExtra, user, coupons = [], initialDate, initialSlot, onClose }: Props) {
+export function BookingForm({ restaurant, slots, dates, memberExtra, user, coupons = [], initialDate, initialSlot, onClose }: Props) {
   const [state, formAction, pending] = useActionState<FormState, FormData>(createBooking, undefined);
   const [payError, setPayError] = useState<string>();
   const [date, setDate] = useState(initialDate && dates.includes(initialDate) ? initialDate : dates[0]);
@@ -68,7 +68,10 @@ export function BookingForm({ restaurant, payOnline, slots, dates, memberExtra, 
     };
   }, [date, restaurant.id, retry]);
 
-  // Our own UPI QR: show it until the guest enters the UTR (which redirects) or closes it.
+  const router = useRouter();
+  // The guest's choice for the fee: pay now (CheckInn Pay, or UPI once a real UPI ID is set) or at the restaurant.
+  const [payChoice, setPayChoice] = useState<"now" | "venue">("venue");
+  // The payment window: shown until the guest pays (which opens the booking) or closes it.
   const [upi, setUpi] = useState<UpiRequest | null>(null);
   useEffect(() => setUpi(state?.upi ?? null), [state]);
 
@@ -107,13 +110,28 @@ export function BookingForm({ restaurant, payOnline, slots, dates, memberExtra, 
   const coupon = eligible.find((c) => c.code === picked) ?? eligible[0] ?? null;
   const off = coupon ? couponDiscount(coupon, fee) : 0;
   const toPay = fee - off;
-  const payNow = payOnline && toPay > 0;
+  const payNow = payChoice === "now" && toPay > 0;
   const busy = pending || Boolean(upi);
   const error = payError ?? state?.error;
 
   return (
     <>
-    {upi && (
+    {upi?.demo && (
+      <CheckInnPay
+        amount={upi.amount}
+        label={`${restaurant.name} · ${fmtDate(date)}, ${fmtTime(slot)} · ${guestLabel}`}
+        qr={upi.qr}
+        pay={(body) => payBooking(upi.code, body)}
+        success="Your table is confirmed!"
+        onDone={(paid) => {
+          if (paid) return router.push(`/bookings/${upi.code}`);
+          releaseBooking(upi.code);
+          setUpi(null);
+          setPayError("Payment cancelled, so your table isn't booked yet. Try again, or choose to pay at the restaurant.");
+        }}
+      />
+    )}
+    {upi && !upi.demo && (
       <UpiPayDialog
         upi={upi}
         summary={`${restaurant.name} · ${fmtDate(date)}, ${fmtTime(slot)} · ${guestLabel}`}
@@ -287,11 +305,39 @@ export function BookingForm({ restaurant, payOnline, slots, dates, memberExtra, 
             </p>
             <p className="mt-0.5 text-xs text-muted">
               {inr(restaurant.fee)} × {guestLabel}
-              {toPay > 0 && ` · ${payNow ? "paid now to confirm your table" : "pay at the restaurant"} · non-refundable`}
+              {toPay > 0 && ` · ${payNow ? "paid now to confirm your table" : "paid at the restaurant"} · non-refundable`}
             </p>
             {coupon && <AppliedOffer fee={fee} offers={eligible} applied={coupon} onPick={setPicked} />}
             <input type="hidden" name="coupon" value={coupon?.code ?? ""} />
           </div>
+        )}
+
+        {toPay > 0 && (
+          <fieldset>
+            <legend className="mb-2 text-sm font-semibold">How would you like to pay?</legend>
+            <div className="grid grid-cols-2 gap-2">
+              {(
+                [
+                  { id: "now", title: "Pay now", hint: "CheckInn Pay · UPI or card", icon: ShieldCheck },
+                  { id: "venue", title: "At the restaurant", hint: "Pay when you arrive", icon: Store },
+                ] as const
+              ).map((o) => (
+                <label
+                  key={o.id}
+                  className={`flex cursor-pointer items-start gap-2.5 rounded-xl border px-3 py-2.5 transition has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand-500 ${
+                    payChoice === o.id ? "border-brand-500 bg-brand-50" : "border-black/10 hover:border-black/25"
+                  }`}
+                >
+                  <input type="radio" name="pay" value={o.id} checked={payChoice === o.id} onChange={() => setPayChoice(o.id)} className="sr-only" />
+                  <o.icon className={`mt-0.5 h-4 w-4 shrink-0 ${payChoice === o.id ? "text-brand-600" : "text-muted"}`} aria-hidden />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold leading-tight">{o.title}</span>
+                    <span className="block text-[11px] leading-snug text-muted">{o.hint}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
         )}
 
         {error && <p className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-700">{error}</p>}

@@ -4,7 +4,6 @@ import { ChevronLeft, Clock, IndianRupee, MapPin, Star, Utensils, Check, Share2,
 import { getRestaurant, getSimilar, buildSlots, getOpenSlots } from "@/lib/restaurants";
 import { getCurrentUser } from "@/lib/auth";
 import { FOOD_TYPES, directionsUrl, inr, memberExtraDiscount } from "@/lib/constants";
-import { paymentMode } from "@/lib/payments";
 import { getUsableCoupons } from "@/lib/offers";
 import { getFestival, offerFestival } from "@/lib/festival";
 import { addDays, fmtTime, nowInIndia } from "@/lib/time";
@@ -236,7 +235,6 @@ export default async function RestaurantPage({
           <BookingPanel
             key={`${sp.date}-${sp.slot}`}
             restaurant={{ id: r.id, name: r.name, capacity: r.capacity_per_slot, discount: r.discount_percent, fee: r.booking_fee }}
-            payOnline={paymentMode() !== "venue"}
             slots={buildSlots(r)}
             dates={dates}
             memberExtra={memberExtra}

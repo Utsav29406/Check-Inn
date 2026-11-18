@@ -57,6 +57,8 @@ export interface Booking {
   amount: number;
   payment_status: "none" | "due" | "pending" | "review" | "paid" | "rejected";
   utr: string | null;
+  /** CheckInn Pay's reference, for a fee paid with it. */
+  payment_ref: string | null;
   /** When the guest was emailed a reminder of this table. */
   reminder_sent_at: string | null;
   /** Coupon taken off the booking fee: amount = fee_per_guest × guests − coupon_discount. */

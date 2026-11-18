@@ -76,14 +76,14 @@ export function couponBenefit(c: Pick<Coupon, "kind" | "value" | "max_discount">
 }
 
 /** How a booking's fee was (or will be) paid, or null for bookings made before fees existed. */
-export function feeLabel(b: Pick<Booking, "payment_status" | "amount" | "utr" | "coupon_discount">): string | null {
+export function feeLabel(b: Pick<Booking, "payment_status" | "amount" | "utr" | "payment_ref" | "coupon_discount">): string | null {
   if (b.coupon_discount > 0) {
     if (b.amount === 0) return "Free with an offer";
     const base = feeLabel({ ...b, coupon_discount: 0 });
     return base && `${base} (${inr(b.coupon_discount)} offer applied)`;
   }
   if (b.payment_status === "review") return `${inr(b.amount)} paid by UPI · being verified`;
-  if (b.payment_status === "paid") return `${inr(b.amount)} paid ${b.utr ? "by UPI" : "online"}`;
+  if (b.payment_status === "paid") return `${inr(b.amount)} paid ${b.payment_ref ? "with CheckInn Pay" : b.utr ? "by UPI" : "at the restaurant"}`;
   if (b.payment_status === "due") return `${inr(b.amount)} payable at the restaurant`;
   return null;
 }

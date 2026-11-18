@@ -9,13 +9,13 @@ import { after } from "next/server";
 import { db, query, transaction } from "@/lib/db";
 import { createSession, destroySession, setWelcome, getCurrentUser, safeNext, validBookingToken } from "@/lib/auth";
 import { HOLDS_SEAT, PAYMENT_HOLD_MINUTES, buildSlots } from "@/lib/restaurants";
-import { paymentMode, upiDemo, upiEnabled, upiId, upiLink } from "@/lib/payments";
+import { upiDemo, upiEnabled, upiId, upiLink } from "@/lib/payments";
 import { TEST, UPI_APPS, upiPayLink, cardBrand, cardDeclined, cardProblem, digits, upiDeclined, upiValid } from "@/lib/checkinnpay";
 import { sendBookingConfirmation, sendCancellationEmails, sendListingReceived, sendLockoutAlert, sendMembershipDecision, sendMembershipPaymentReceived, sendSignInAlert } from "@/lib/email";
 import { BOOKING_LIMIT, LOGIN_LIMIT, clearAttempts, clientIp, recentAttempts, recordAttempt, requestSummary } from "@/lib/limits";
 import { CITIES, PLANS, memberExtraDiscount } from "@/lib/constants";
 import { parseLocation, savePhoto } from "@/lib/images";
-import { bestCoupon, scratchCard } from "@/lib/offers";
+import { awardScratchCard, bestCoupon, scratchCard } from "@/lib/offers";
 import { getFestival, offerFestival } from "@/lib/festival";
 import { addDays, nowInIndia } from "@/lib/time";
 import type { Coupon, Restaurant, ScratchReveal } from "@/lib/types";
@@ -30,6 +30,8 @@ export interface UpiRequest {
   /** QR code as an SVG string. */
   qr: string;
   holdMinutes: number;
+  /** Demo mode: paid in CheckInn Pay (the demo gateway) rather than real UPI. */
+  demo: boolean;
 }
 
 export type FormState = { error?: string; success?: string; upi?: UpiRequest } | undefined;
@@ -113,6 +115,8 @@ export async function createBooking(_: FormState, fd: FormData): Promise<FormSta
   const email = str(fd, "email");
   const request = str(fd, "request").slice(0, 500);
   const couponCode = str(fd, "coupon");
+  // The guest's choice: pay the fee now (CheckInn Pay, or UPI once a real UPI ID is set) or at the restaurant.
+  const payNow = str(fd, "pay") === "now";
 
   if (!Number.isInteger(restaurantId) || restaurantId < 1) return { error: "This restaurant no longer exists." };
   if (!slot) return { error: "Please pick a time slot." };
@@ -151,7 +155,6 @@ export async function createBooking(_: FormState, fd: FormData): Promise<FormSta
   }
 
   const [user, festival] = await Promise.all([getCurrentUser(), getFestival()]);
-  const mode = paymentMode();
   // Tidy up payments abandoned more than a day ago (they stopped holding seats after 15 minutes).
   await query("UPDATE bookings SET status = 'cancelled' WHERE status = 'pending' AND created_at < now() - interval '1 day'");
   let booking: { code: string; amount: number; restaurant: string; online: boolean };
@@ -199,7 +202,7 @@ export async function createBooking(_: FormState, fd: FormData): Promise<FormSta
       const best = await bestCoupon(client, { userId: user?.id ?? null, phone, guests, fee, festival: offerFestival(festival) }, couponCode);
       const coupon = best && { id: best.coupon.id, code: best.coupon.code, discount: best.discount };
       const amount = fee - (coupon?.discount ?? 0);
-      const online = mode !== "venue" && amount > 0;
+      const online = payNow && amount > 0;
       // A code clash is near impossible, but would otherwise crash the booking: try a fresh code instead.
       for (let attempt = 0; attempt < 5; attempt++) {
         const {
@@ -230,10 +233,12 @@ export async function createBooking(_: FormState, fd: FormData): Promise<FormSta
   await recordAttempt("booking-ip", ip);
 
   if (booking.online) {
-    const link = upiLink(booking.amount, `CheckInn ${booking.code}`);
+    const note = `CheckInn ${booking.code}`;
+    // Demo mode: CheckInn Pay's made-up payee, which real UPI apps refuse.
+    const link = upiDemo() ? upiPayLink(booking.code, booking.amount, note) : upiLink(booking.amount, note);
     const qr = await QRCode.toString(link, { type: "svg", margin: 1, errorCorrectionLevel: "M", color: { dark: "#061f19", light: "#ffffff" } });
     return {
-      upi: { code: booking.code, amount: booking.amount, upiId: upiId(), link, qr, holdMinutes: PAYMENT_HOLD_MINUTES },
+      upi: { code: booking.code, amount: booking.amount, upiId: upiId(), link, qr, holdMinutes: PAYMENT_HOLD_MINUTES, demo: upiDemo() },
     };
   }
   after(() => sendBookingConfirmation(booking.code));
@@ -289,6 +294,38 @@ export async function submitUtr(code: string, utr: string): Promise<FormState> {
   after(() => sendBookingConfirmation(code));
   revalidatePath("/bookings");
   redirect(`/bookings/${code}`);
+}
+
+/**
+ * CheckInn Pay for a table booking fee: the table was held while the guest paid; a successful payment confirms it,
+ * marks the fee paid (which unlocks the scratch card) and sends the confirmation. Only while no real UPI ID is set.
+ * The booking code is only ever given to the browser that made the booking.
+ */
+export async function payBooking(code: string, body: CheckInnPayBody): Promise<{ paid: boolean; error?: string; invalid?: boolean }> {
+  if (!upiDemo()) return { paid: false, error: "CheckInn Pay is off. Please pay by UPI." };
+  const decided = decideCheckInnPay(body);
+  if ("error" in decided) return { paid: false, ...decided };
+  const outcome = await transaction(async (client) => {
+    const {
+      rows: [b],
+    } = await client.query<{ status: string; payment_status: string; held: boolean }>(
+      `SELECT status, payment_status, created_at > now() - interval '${PAYMENT_HOLD_MINUTES} minutes' AS held FROM bookings WHERE code = $1 FOR UPDATE`,
+      [code],
+    );
+    if (!b || b.status !== "pending" || b.payment_status !== "pending") return "gone";
+    // The hold ran out: the seats and offer may have gone to someone else, so release it rather than take the payment.
+    if (!b.held) {
+      await client.query("UPDATE bookings SET status = 'cancelled' WHERE code = $1", [code]);
+      return "expired";
+    }
+    await client.query("UPDATE bookings SET status = 'confirmed', payment_status = 'paid', payment_ref = $2 WHERE code = $1", [code, decided.ref]);
+    await awardScratchCard(client, code);
+    return "paid";
+  });
+  if (outcome === "gone") return { paid: false, error: "This booking was released. Close this window and book again." };
+  if (outcome === "expired") return { paid: false, error: `The ${PAYMENT_HOLD_MINUTES}-minute hold on this table ran out, so nothing was charged. Please book again.` };
+  after(() => sendBookingConfirmation(code));
+  return { paid: true };
 }
 
 /** The guest closed the UPI QR without paying: free the seats straight away. */
@@ -379,6 +416,35 @@ export type CheckInnPayBody =
   | { method: "upi"; upi: { qr?: boolean; app?: string; vpa?: string; simulate?: "decline" } };
 
 /**
+ * CheckInn Pay's bank: decides a payment from the details entered (lib/checkinnpay has the test cards, UPI IDs and OTP).
+ * No money moves; card numbers are checked and dropped, only the last four go into the reference.
+ */
+function decideCheckInnPay(body: CheckInnPayBody): { ref: string } | { error: string; invalid?: boolean } {
+  const stamp = Date.now().toString(36).toUpperCase();
+  let ref: string;
+  if (body?.method === "card") {
+    const card = { number: String(body.card?.number ?? ""), expiry: String(body.card?.expiry ?? ""), cvv: String(body.card?.cvv ?? "") };
+    const problem = cardProblem(card);
+    if (problem) return { invalid: true, error: problem };
+    if (String(body.card?.otp ?? "") !== TEST.otp) return { error: "Incorrect OTP. The payment was not made." };
+    if (cardDeclined(card.number)) return { error: "Your bank declined this card. No money was taken." };
+    ref = `CPAY-CARD-${(cardBrand(card.number) ?? "CARD").toUpperCase()}-${digits(card.number).slice(-4)}-${stamp}`;
+  } else if (body?.method === "upi" && (body.upi?.qr === true || UPI_APPS.some((a) => a.id === body.upi?.app))) {
+    // Scanned QR (laptop) or a hand-off to a UPI app (phone): "I've paid" stands for the app confirming.
+    if (body.upi.simulate === "decline") return { error: "The payment was not completed in the UPI app. No money was taken." };
+    ref = body.upi.qr === true ? `CPAY-UPI-QR-${stamp}` : `CPAY-UPI-APP-${stamp}`;
+  } else if (body?.method === "upi") {
+    const vpa = String(body.upi?.vpa ?? "").trim().toLowerCase();
+    if (!upiValid(vpa)) return { invalid: true, error: "Check the UPI ID." };
+    if (upiDeclined(vpa)) return { error: "The payment request was declined in the UPI app." };
+    ref = `CPAY-UPI-${stamp}`;
+  } else {
+    return { invalid: true, error: "Choose card or UPI." };
+  }
+  return { ref };
+}
+
+/**
  * CheckInn Pay, the demo gateway, for Club membership: decides the payment the way a bank would, from the details
  * entered (lib/checkinnpay has the test cards, UPI IDs and OTP). No money moves; card numbers are checked and dropped,
  * only the last four are kept. A paid membership starts straight away. Only used while no real UPI ID is set.
@@ -387,27 +453,9 @@ export async function payMembership(id: number, body: CheckInnPayBody): Promise<
   const user = await getCurrentUser();
   if (!user) return { paid: false, error: "Please sign in again." };
   if (!upiDemo()) return { paid: false, error: "CheckInn Pay is off. Please pay by UPI." };
-  const stamp = Date.now().toString(36).toUpperCase();
-  let ref: string;
-  if (body?.method === "card") {
-    const card = { number: String(body.card?.number ?? ""), expiry: String(body.card?.expiry ?? ""), cvv: String(body.card?.cvv ?? "") };
-    const problem = cardProblem(card);
-    if (problem) return { paid: false, invalid: true, error: problem };
-    if (String(body.card?.otp ?? "") !== TEST.otp) return { paid: false, error: "Incorrect OTP. The payment was not made." };
-    if (cardDeclined(card.number)) return { paid: false, error: "Your bank declined this card. No money was taken." };
-    ref = `CPAY-CARD-${(cardBrand(card.number) ?? "CARD").toUpperCase()}-${digits(card.number).slice(-4)}-${stamp}`;
-  } else if (body?.method === "upi" && (body.upi?.qr === true || UPI_APPS.some((a) => a.id === body.upi?.app))) {
-    // Scanned QR (laptop) or a hand-off to a UPI app (phone): "I've paid" stands for the app confirming.
-    if (body.upi.simulate === "decline") return { paid: false, error: "The payment was not completed in the UPI app. No money was taken." };
-    ref = body.upi.qr === true ? `CPAY-UPI-QR-${stamp}` : `CPAY-UPI-APP-${stamp}`;
-  } else if (body?.method === "upi") {
-    const vpa = String(body.upi?.vpa ?? "").trim().toLowerCase();
-    if (!upiValid(vpa)) return { paid: false, invalid: true, error: "Check the UPI ID." };
-    if (upiDeclined(vpa)) return { paid: false, error: "The payment request was declined in the UPI app." };
-    ref = `CPAY-UPI-${stamp}`;
-  } else {
-    return { paid: false, invalid: true, error: "Choose card or UPI." };
-  }
+  const decided = decideCheckInnPay(body);
+  if ("error" in decided) return { paid: false, ...decided };
+  const { ref } = decided;
 
   const today = nowInIndia().date;
   const paid = await transaction(async (client) => {

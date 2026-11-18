@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AppWindow, AtSign, Check, ChevronRight, CreditCard, Loader2, Lock, QrCode, ShieldCheck, Smartphone, X, XCircle } from "lucide-react";
-import { payMembership, type CheckInnPayBody, type MembershipCheckout } from "@/app/actions";
+import type { CheckInnPayBody } from "@/app/actions";
 import { inr } from "@/lib/constants";
 import {
   cardBrand,
@@ -20,11 +20,11 @@ import {
 } from "@/lib/checkinnpay";
 
 /*
- * The CheckInn Pay window: CheckInn's own dummy gateway (rules in lib/checkinnpay), used for Club membership until a
- * real UPI ID is set. Card goes through a bank OTP step. UPI, as real gateways do it: on a laptop a QR code to scan
+ * The CheckInn Pay window: CheckInn's own dummy gateway (rules in lib/checkinnpay), used for Club membership and table
+ * booking fees until a real UPI ID is set. Card goes through a bank OTP step. UPI, as real gateways do it: on a laptop a QR code to scan
  * with the phone; on a phone (which can't scan its own screen) a hand-off to a UPI app; on both, a UPI ID that gets an
  * "approve in your app" request. The demo never opens a real app (the payee is made up); a short "opening…" screen
- * stands in for the hand-off. The server (payMembership) decides every outcome.
+ * stands in for the hand-off. The server (`pay`: payMembership or payBooking) decides every outcome.
  */
 
 type Stage = "details" | "otp" | "opening" | "approve" | "processing" | "success" | "declined";
@@ -35,8 +35,25 @@ const chip = "rounded-full border border-black/10 px-2.5 py-1 text-[11px] font-m
 const primary = "rounded-xl bg-brand-600 py-3 font-semibold text-white transition hover:bg-brand-700";
 const UPI_WAIT_S = 5;
 
-export function CheckInnPay({ checkout, onDone }: { checkout: MembershipCheckout; onDone: (paid: boolean) => void }) {
-  const { amount } = checkout;
+export function CheckInnPay({
+  amount,
+  label,
+  qr,
+  pay,
+  success,
+  onDone,
+}: {
+  amount: number;
+  /** What's being paid for, under "CheckInn Pay". */
+  label: string;
+  /** The UPI QR as SVG, made on the server. */
+  qr: string;
+  /** Sends the payment to the server, which decides it. */
+  pay: (body: CheckInnPayBody) => Promise<{ paid: boolean; error?: string; invalid?: boolean }>;
+  /** Shown under "Payment successful". */
+  success: string;
+  onDone: (paid: boolean) => void;
+}) {
   const [method, setMethod] = useState<CheckInnPayMethod>("upi");
   const [stage, setStage] = useState<Stage>("details");
   const [card, setCard] = useState({ number: "", expiry: "", cvv: "", name: "" });
@@ -60,7 +77,7 @@ export function CheckInnPay({ checkout, onDone }: { checkout: MembershipCheckout
     setStage("processing");
     // A moment of "processing", as a bank would take.
     const [result] = await Promise.all([
-      payMembership(checkout.id, body).catch(() => ({ paid: false, invalid: false, error: "Couldn't reach CheckInn Pay. Check your connection." })),
+      pay(body).catch(() => ({ paid: false, invalid: false, error: "Couldn't reach CheckInn Pay. Check your connection." })),
       new Promise((r) => setTimeout(r, 1300)),
     ]);
     if (result.paid) {
@@ -184,7 +201,7 @@ export function CheckInnPay({ checkout, onDone }: { checkout: MembershipCheckout
               CheckInn Pay
               <span className="rounded-full bg-gold-400 px-2 py-px text-[10px] font-bold uppercase tracking-wider text-brand-900">Demo</span>
             </p>
-            <p className="mt-0.5 text-[11px] text-white/60">CheckInn Club {checkout.plan} · 1 year</p>
+            <p className="mt-0.5 text-[11px] text-white/60">{label}</p>
           </div>
           <div className="text-right">
             <p className="text-[11px] uppercase tracking-wider text-white/55">Amount</p>
@@ -349,7 +366,7 @@ export function CheckInnPay({ checkout, onDone }: { checkout: MembershipCheckout
                         className="h-48 w-48 rounded-2xl bg-white p-2.5 shadow-md ring-1 ring-black/5 [&>svg]:h-full [&>svg]:w-full"
                         role="img"
                         aria-label={`UPI QR code to pay ${inr(amount)}`}
-                        dangerouslySetInnerHTML={{ __html: checkout.qr }}
+                        dangerouslySetInnerHTML={{ __html: qr }}
                       />
                       <div>
                         <p className="text-sm">
@@ -516,7 +533,9 @@ export function CheckInnPay({ checkout, onDone }: { checkout: MembershipCheckout
                     <Check className="h-7 w-7" aria-hidden />
                   </span>
                   <p className="font-semibold">Payment successful</p>
-                  <p className="text-sm text-muted">{inr(amount)} paid to CheckInn · Welcome to the Club!</p>
+                  <p className="text-sm text-muted">
+                    {inr(amount)} paid to CheckInn · {success}
+                  </p>
                 </>
               )}
             </div>
