@@ -84,6 +84,10 @@ body {
   opacity: 1;
   transform: none;
 }
+/* Phones show sections straight away: fading in made every page feel slow to open there. */
+@media (max-width: 767px) {
+  .reveal { opacity: 1; transform: none; transition: none; }
+}
 
 /* ---------- Misc ---------- */
 @keyframes float {

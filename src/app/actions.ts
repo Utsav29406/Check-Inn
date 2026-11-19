@@ -352,6 +352,7 @@ export async function payBooking(code: string, body: CheckInnPayBody): Promise<{
   if (outcome === "gone") return { paid: false, error: "This booking was released. Close this window and book again." };
   if (outcome === "expired") return { paid: false, error: `The ${PAYMENT_HOLD_MINUTES}-minute hold on this table ran out, so nothing was charged. Please book again.` };
   after(() => sendBookingConfirmation(code));
+  revalidatePath("/bookings");
   return { paid: true };
 }
 
