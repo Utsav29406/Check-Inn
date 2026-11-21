@@ -9,6 +9,9 @@ import { useSyncExternalStore } from "react";
  * Chrome offers its install only once the visitor has tapped the page and spent about 30 seconds on the site, so a tap
  * can come before it is ready. The tap itself counts, so install() then waits a few seconds for the offer and installs
  * as soon as it arrives. If it still doesn't come, a short note says why (already installed, or try again shortly).
+ *
+ * iPhones and iPads have no install a page can start (Safari keeps "Add to Home Screen" in its own Share menu), so
+ * there the button shows a one-line note naming those two taps.
  */
 type PromptEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: "accepted" | "dismissed" }> };
 
@@ -19,13 +22,15 @@ interface InstallState {
   standalone: boolean;
   /** An Android phone: install buttons show there even before the browser's offer arrives. */
   android: boolean;
+  /** An iPhone or iPad: install is Safari's Share → Add to Home Screen. */
+  ios: boolean;
   /** Waiting for the browser's offer after a tap. */
   waiting: boolean;
   /** A short note after a tap that couldn't install. */
   notice: string | null;
 }
 
-const SERVER: InstallState = { prompt: null, standalone: false, android: false, waiting: false, notice: null };
+const SERVER: InstallState = { prompt: null, standalone: false, android: false, ios: false, waiting: false, notice: null };
 let state = SERVER;
 const listeners = new Set<() => void>();
 const set = (patch: Partial<InstallState>) => {
@@ -40,10 +45,10 @@ const subscribe = (l: () => void) => {
 /** How long a tap waits for the browser's offer. A browser lets a page open its install only within ~5 s of a tap. */
 const WAIT_MS = 4000;
 let noticeTimer: number | undefined;
-function note(text: string) {
+function note(text: string, ms = 6000) {
   window.clearTimeout(noticeTimer);
   set({ notice: text });
-  noticeTimer = window.setTimeout(() => set({ notice: null }), 6000);
+  noticeTimer = window.setTimeout(() => set({ notice: null }), ms);
 }
 
 /** The browser's offer, now or within WAIT_MS. */
@@ -76,6 +81,7 @@ async function installedAlready() {
 /** Installs straight away with the browser's own install. */
 export async function install() {
   if (state.waiting) return;
+  if (state.ios && !state.prompt) return note("To install, tap Safari's Share button, then Add to Home Screen.", 9000);
   set({ waiting: !state.prompt, notice: null });
   const prompt = await offer();
   set({ waiting: false });
@@ -102,6 +108,7 @@ if (typeof window !== "undefined") {
     ...state,
     standalone: window.matchMedia("(display-mode: standalone)").matches || nav.standalone === true,
     android: /android/i.test(nav.userAgent),
+    ios: /iphone|ipad|ipod/i.test(nav.userAgent) || (/macintosh/i.test(nav.userAgent) && nav.maxTouchPoints > 1),
     // Offered before this script loaded: kept by the <head> script (lib/install-early).
     prompt: (window as Window & { __checkinnInstall?: PromptEvent }).__checkinnInstall ?? null,
   };

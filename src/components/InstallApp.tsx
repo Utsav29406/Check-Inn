@@ -9,8 +9,9 @@ import { install, useInstall } from "@/lib/install";
  * "Get the app" on phones. CheckInn has no Play Store app; instead the site installs itself to the home screen
  * (manifest.ts, public/sw.js) and opens full screen from its own icon.
  *
- * Install always runs the browser's own install, straight from the page, with no how-to steps (lib/install). The
- * options show on Android phones, and on any phone whose browser offers its install:
+ * Install runs the browser's own install, straight from the page, with no how-to steps (lib/install). iPhones have
+ * none, so there the button names Safari's Share → Add to Home Screen in one line. The options show on Android
+ * phones, iPhones, and any phone whose browser offers its install:
  * - a card just under the navbar, a few seconds in. Closing it keeps it away for two weeks;
  * - "Install the app" (InstallAppButton) on the phone home screen and the Profile page.
  */
@@ -28,7 +29,7 @@ function dismissedRecently() {
 }
 
 export function InstallApp() {
-  const { prompt, standalone, android, waiting, notice } = useInstall();
+  const { prompt, standalone, android, ios, waiting, notice } = useInstall();
   const [ready, setReady] = useState(false);
   const [closed, setClosed] = useState(true);
 
@@ -48,7 +49,7 @@ export function InstallApp() {
     } catch {}
   }
 
-  const show = ready && !closed && !standalone && (Boolean(prompt) || android);
+  const show = ready && !closed && !standalone && (Boolean(prompt) || android || ios);
 
   return (
     <>
@@ -62,7 +63,7 @@ export function InstallApp() {
           </span>
           <span className="min-w-0 flex-1">
             <b className="block text-[13.5px] font-semibold leading-tight">Get the CheckInn app</b>
-            <span className="block text-[11.5px] leading-snug text-white/65">Book tables from your home screen. No Play Store needed.</span>
+            <span className="block text-[11.5px] leading-snug text-white/65">Book tables from your home screen. No app store needed.</span>
           </span>
           <button
             type="button"
@@ -95,8 +96,8 @@ export function InstallApp() {
  * app. Pass children to replace the default label.
  */
 export function InstallAppButton({ className = "inline-flex items-center gap-1.5", children }: { className?: string; children?: React.ReactNode }) {
-  const { prompt, standalone, android, waiting } = useInstall();
-  if ((!prompt && !android) || standalone) return null;
+  const { prompt, standalone, android, ios, waiting } = useInstall();
+  if ((!prompt && !android && !ios) || standalone) return null;
   return (
     <button type="button" onClick={() => void install()} aria-busy={waiting} className={`md:hidden aria-busy:opacity-70 ${className}`}>
       {children ?? (

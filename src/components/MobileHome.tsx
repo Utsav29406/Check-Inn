@@ -174,7 +174,7 @@ export function MobileHome({
         <LogoMark className="h-9 w-9 shrink-0" />
         <span className="flex-1">
           <b>Get the CheckInn app</b>
-          <span className="block text-white/65">Book from your home screen. No Play Store needed.</span>
+          <span className="block text-white/65">Book from your home screen. No app store needed.</span>
         </span>
         <Download className="h-5 w-5 shrink-0 text-gold-300" />
       </InstallAppButton>
