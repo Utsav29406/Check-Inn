@@ -11,7 +11,8 @@ import { install, setInstallSheet, useInstall } from "@/lib/install";
  *
  * - A card just under the navbar offers it once, a few seconds in, where the browser can install or the phone is an
  *   iPhone. Closing it keeps it away for two weeks.
- * - The footer's "Install the app" (InstallAppButton) is there any time.
+ * - "Install the app" (InstallAppButton) is there any time: on the phone home screen, the Profile page and the
+ *   desktop footer.
  * - iPhones, and browsers with no install prompt, get a sheet with the steps.
  */
 
@@ -48,7 +49,11 @@ export function InstallApp() {
     } catch {}
   }
 
-  const show = ready && !closed && !standalone && (Boolean(prompt) || ios);
+  // Android shows the card even before Chrome offers its prompt (Chrome waits for some use of the site first, and
+  // other browsers never offer one): Install then opens the steps instead.
+  const [android, setAndroid] = useState(false);
+  useEffect(() => setAndroid(/android/i.test(navigator.userAgent)), []);
+  const show = ready && !closed && !standalone && (Boolean(prompt) || ios || android);
 
   return (
     <>
@@ -84,16 +89,20 @@ export function InstallApp() {
   );
 }
 
-/** Footer link: phones only, hidden inside the installed app. */
-export function InstallAppButton({ className = "" }: { className?: string }) {
+/** "Install the app": phones only, hidden inside the installed app. Pass children to replace the default label. */
+export function InstallAppButton({ className = "inline-flex items-center gap-1.5", children }: { className?: string; children?: React.ReactNode }) {
   const { standalone } = useInstall();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   if (!mounted || standalone) return null;
   return (
-    <button type="button" onClick={() => void install()} className={`inline-flex items-center gap-1.5 md:hidden ${className}`}>
-      <Download className="h-3.5 w-3.5" aria-hidden />
-      Install the app
+    <button type="button" onClick={() => void install()} className={`md:hidden ${className}`}>
+      {children ?? (
+        <>
+          <Download className="h-3.5 w-3.5" aria-hidden />
+          Install the app
+        </>
+      )}
     </button>
   );
 }

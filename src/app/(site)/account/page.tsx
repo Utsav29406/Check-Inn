@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { CalendarDays, ChevronRight, Crown, Gift, LogOut, Store } from "lucide-react";
+import { CalendarDays, ChevronRight, Crown, Download, Gift, LogOut, Store } from "lucide-react";
+import { InstallAppButton } from "@/components/InstallApp";
 import { getCurrentUser } from "@/lib/auth";
 import { PLANS } from "@/lib/constants";
 import { fmtDate, nowInIndia } from "@/lib/time";
@@ -48,6 +49,13 @@ export default async function AccountPage() {
         <Row href="/offers" icon={<Gift className="h-5 w-5" />}>Offers &amp; scratch cards</Row>
         <Row href="/membership" icon={<Crown className="h-5 w-5" />}>CheckInn Club</Row>
         <Row href="/partner" icon={<Store className="h-5 w-5" />}>Partner with us</Row>
+        <InstallAppButton className="flex w-full items-center gap-3 px-4 py-4 text-left font-medium">
+          <span className="text-brand-600">
+            <Download className="h-5 w-5" />
+          </span>
+          <span className="flex-1">Install the app</span>
+          <ChevronRight className="h-4 w-4 text-muted" />
+        </InstallAppButton>
       </nav>
 
       <form action={logout} className="mt-6">

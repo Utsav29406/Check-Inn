@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronRight, Crown, Gift, Search, Star } from "lucide-react";
+import { ChevronRight, Crown, Download, Gift, Search, Star } from "lucide-react";
 import { CUISINES, FOOD_TYPES, inr, unsplash } from "@/lib/constants";
 import type { OpenSlots } from "@/lib/restaurants";
 import type { Restaurant } from "@/lib/types";
@@ -7,6 +7,8 @@ import { CityPicker } from "./CityPicker";
 import { OpenSlotLinks } from "./RestaurantCard";
 import { SafeImage } from "./SafeImage";
 import { FoodMark } from "./FoodMark";
+import { InstallAppButton } from "./InstallApp";
+import { LogoMark } from "./Logo";
 import { Diya, Mandala, Sparkle } from "./diwali/Art";
 
 /** Phone-only home screen (the desktop home is unchanged). */
@@ -167,6 +169,15 @@ export function MobileHome({
         </span>
         <ChevronRight className="h-4 w-4 text-muted" />
       </Link>
+
+      <InstallAppButton className="mx-4 mt-4 flex w-[calc(100%-2rem)] items-center gap-3 rounded-2xl bg-brand-900 px-4 py-3.5 text-left text-sm text-white">
+        <LogoMark className="h-9 w-9 shrink-0" />
+        <span className="flex-1">
+          <b>Get the CheckInn app</b>
+          <span className="block text-white/65">Book from your home screen. No Play Store needed.</span>
+        </span>
+        <Download className="h-5 w-5 shrink-0 text-gold-300" />
+      </InstallAppButton>
 
       <Link href="/partner" className="mx-4 mt-4 flex items-center justify-between rounded-2xl border border-black/10 bg-white px-4 py-3.5 text-sm">
         <span>

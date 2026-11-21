@@ -25,7 +25,7 @@ export function Footer() {
             <li><Link href="/restaurants?sort=offers" className="hover:text-gold-300">Best offers</Link></li>
             <li><Link href="/membership" className="hover:text-gold-300">CheckInn Club</Link></li>
             <li><Link href="/bookings" className="hover:text-gold-300">My bookings</Link></li>
-            <li><InstallAppButton className="text-gold-300" /></li>
+            <li><InstallAppButton className="inline-flex items-center gap-1.5 text-gold-300" /></li>
           </ul>
         </div>
         <div>
