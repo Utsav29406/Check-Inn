@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ComponentProps } from "react";
+import { CalendarDays } from "lucide-react";
 import { inr } from "@/lib/constants";
 import { BookingForm } from "./BookingForm";
 
@@ -42,14 +43,27 @@ export function BookingPanel(form: Props) {
 
   return (
     <>
-      <div className="fixed inset-x-0 bottom-0 z-40 flex items-center gap-4 border-t border-black/5 bg-cream/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur-md md:hidden">
+      {/* Android: the fee and a Material "Book a table" button. iPhone: a glass bar floating above the bottom edge. */}
+      <div
+        className={[
+          "fixed inset-x-0 bottom-0 z-40 flex items-center gap-4 border-t border-black/5 bg-cream/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur-md md:hidden",
+          "android:justify-between",
+          "ios:inset-x-4 ios:bottom-[calc(0.75rem+env(safe-area-inset-bottom))] ios:gap-3 ios:rounded-full ios:border-0 ios:bg-white/70 ios:py-1.5 ios:pr-1.5 ios:pl-5 ios:shadow-[0_10px_30px_-8px_rgba(0,0,0,.25),inset_0_0_0_.5px_rgba(255,255,255,.7),0_0_0_.5px_rgba(0,0,0,.08)] ios:backdrop-blur-xl ios:backdrop-saturate-[1.8]",
+        ].join(" ")}
+      >
         <p className="text-xs text-muted">
           Booking fee
           <span className="block">
             <b className="text-base text-ink">{inr(form.restaurant.fee)}</b> / guest
           </span>
         </p>
-        <button ref={opener} type="button" onClick={() => setOpen(true)} className="flex-1 rounded-xl bg-brand-600 py-3.5 font-semibold text-white active:scale-[.98]">
+        <button
+          ref={opener}
+          type="button"
+          onClick={() => setOpen(true)}
+          className="flex flex-1 items-center justify-center gap-3 rounded-xl bg-brand-600 py-3.5 font-semibold text-white active:scale-[.98] android:flex-none android:rounded-2xl android:px-5 android:py-4 android:font-medium android:shadow-[0_3px_8px_rgba(6,31,25,.3)] ios:rounded-full ios:py-4"
+        >
+          <CalendarDays className="hidden h-5 w-5 android:block" />
           Book a table
         </button>
       </div>

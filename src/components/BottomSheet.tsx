@@ -54,16 +54,24 @@ export function BottomSheet({
         role="dialog"
         aria-modal="true"
         aria-label={label}
-        className={`absolute inset-x-0 bottom-0 flex max-h-[88vh] supports-[height:100dvh]:max-h-[88dvh] flex-col rounded-t-[1.75rem] bg-cream shadow-2xl transition-transform duration-450 [transition-timing-function:cubic-bezier(.2,.8,.2,1)] ${open ? "translate-y-0" : "translate-y-full"}`}
+        className={`absolute inset-x-0 bottom-0 flex max-h-[88vh] supports-[height:100dvh]:max-h-[88dvh] flex-col rounded-t-[1.75rem] ios:rounded-t-xl bg-cream shadow-2xl transition-transform duration-450 [transition-timing-function:cubic-bezier(.2,.8,.2,1)] ${open ? "translate-y-0" : "translate-y-full"}`}
       >
-        <div className="mx-auto mt-2.5 h-1.5 w-10 shrink-0 rounded-full bg-black/15" />
+        <div className="mx-auto mt-2.5 h-1.5 w-10 shrink-0 rounded-full bg-black/15 android:mt-3.5 android:h-1 android:w-8 android:bg-[#8a938e] ios:mt-1.5 ios:h-[5px] ios:w-9 ios:bg-[#c7c7cc]" />
         <div className="flex items-center justify-between px-5 pt-2 pb-1">
           <div>
             {eyebrow && <p className="text-[11px] font-semibold uppercase tracking-widest text-gold-600">{eyebrow}</p>}
             <h2 className="font-display text-2xl font-bold">{label}</h2>
           </div>
-          <button ref={closeBtn} type="button" onClick={onClose} aria-label="Close" className="grid h-10 w-10 place-items-center rounded-full border border-black/10 bg-white">
-            <X className="h-5 w-5" />
+          {/* iPhone sheets close with a plain "Done" in the corner; elsewhere a round X button. */}
+          <button
+            ref={closeBtn}
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="grid h-10 w-10 place-items-center rounded-full border border-black/10 bg-white ios:w-auto ios:border-0 ios:bg-transparent ios:text-[17px] ios:font-semibold ios:text-brand-500"
+          >
+            <X className="h-5 w-5 ios:hidden" />
+            <span className="hidden ios:inline">Done</span>
           </button>
         </div>
         <div className="no-scrollbar flex-1 overflow-y-auto overscroll-contain px-5 pb-4">{children}</div>

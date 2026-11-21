@@ -154,8 +154,8 @@ export function BookingForm({ restaurant, slots, dates, memberExtra, user, coupo
         const fd = new FormData(e.currentTarget);
         startTransition(() => formAction(fd));
       }}
-      className="rounded-t-[1.75rem] bg-white ring-1 ring-black/5 md:overflow-hidden md:rounded-3xl md:shadow-xl">
-      <div className="relative rounded-t-[1.75rem] bg-brand-600 px-6 py-5 text-white md:rounded-none">
+      className="rounded-t-[1.75rem] bg-white ring-1 ring-black/5 max-md:ios:rounded-t-xl md:overflow-hidden md:rounded-3xl md:shadow-xl">
+      <div className="relative rounded-t-[1.75rem] bg-brand-600 px-6 py-5 text-white max-md:ios:rounded-t-xl md:rounded-none">
         <div className="mx-auto -mt-2 mb-3 h-1.5 w-10 rounded-full bg-white/30 md:hidden" />
         {onClose && (
           <button type="button" onClick={onClose} aria-label="Close" className="absolute right-4 top-5 grid h-9 w-9 place-items-center rounded-full bg-white/15 md:hidden">
@@ -345,7 +345,7 @@ export function BookingForm({ restaurant, slots, dates, memberExtra, user, coupo
         <div className="sticky bottom-0 -mx-6 border-t border-black/5 bg-white px-6 pt-3 pb-[calc(1rem+env(safe-area-inset-bottom))] md:static md:mx-0 md:border-0 md:p-0">
           <button
             disabled={busy || !slot}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-600 py-3.5 font-semibold text-white transition hover:bg-brand-700 disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-600 py-3.5 font-semibold text-white transition hover:bg-brand-700 disabled:opacity-50 max-md:android:rounded-full max-md:android:py-3 max-md:android:font-medium max-md:ios:rounded-full"
           >
             {busy && <Loader2 className="h-4 w-4 animate-spin" />}
             <span className="md:hidden">

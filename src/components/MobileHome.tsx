@@ -41,21 +41,21 @@ export function MobileHome({
           </>
         )}
       </h1>
-      <form action="/restaurants" className="mx-4 mt-4 flex items-center gap-3 rounded-2xl border border-black/10 bg-white px-4 shadow-[0_6px_18px_-12px_rgba(6,31,25,.35)]">
+      <form action="/restaurants" className="mx-4 mt-4 flex items-center gap-3 rounded-2xl border border-black/10 bg-white px-4 shadow-[0_6px_18px_-12px_rgba(6,31,25,.35)] android:h-14 android:rounded-full android:border-0 android:bg-[#ece7db] android:px-5 android:shadow-none ios:gap-2 ios:rounded-[10px] ios:border-0 ios:bg-[rgba(118,118,128,.12)] ios:px-2.5 ios:shadow-none">
         <input type="hidden" name="city" value={city} />
-        <Search className="h-5 w-5 shrink-0 text-muted" />
+        <Search className="h-5 w-5 shrink-0 text-muted ios:h-4.5 ios:w-4.5 ios:text-[#8a8a8e]" />
         <input
           name="q"
           type="search"
           enterKeyHint="search"
           aria-label="Search restaurants"
           placeholder="Restaurants, cuisines or areas"
-          className="w-full bg-transparent py-3.5 text-base outline-none placeholder:text-muted"
+          className="w-full bg-transparent py-3.5 text-base outline-none placeholder:text-muted ios:py-2 ios:text-[17px] ios:placeholder:text-[#8a8a8e]"
         />
       </form>
       <div className="mx-4 mt-3 flex gap-2">
         {(["veg", "nonveg"] as const).map((t) => (
-          <Link key={t} href={`/restaurants?${q}&food=${t}`} className="flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-3.5 py-1.5 text-[13px] font-semibold">
+          <Link key={t} href={`/restaurants?${q}&food=${t}`} className="flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-3.5 py-1.5 text-[13px] font-semibold android:h-8 android:rounded-lg android:border-[#c2c9c4] android:bg-transparent android:py-0 android:text-sm android:font-medium ios:border-0 ios:font-medium">
             <FoodMark type={t} className="h-3.5 w-3.5" /> {FOOD_TYPES[t]}
           </Link>
         ))}
@@ -181,8 +181,9 @@ export function MobileHome({
 function SectionHead({ title, href }: { title: string; href: string }) {
   return (
     <div className="mx-4 mt-7 mb-3 flex items-baseline justify-between">
-      <h2 className="font-display text-xl font-bold">{title}</h2>
-      <Link href={href} className="text-sm font-semibold text-brand-600">
+      {/* Section titles in the phone's own style: Material on Android, bold San Francisco on iPhones. */}
+      <h2 className="font-display text-xl font-bold android:font-sans android:text-[1.375rem] android:font-medium ios:font-sans ios:text-[1.375rem] ios:font-bold ios:tracking-tight">{title}</h2>
+      <Link href={href} className="text-sm font-semibold text-brand-600 android:font-medium ios:text-[17px] ios:font-normal ios:text-brand-500">
         See all
       </Link>
     </div>

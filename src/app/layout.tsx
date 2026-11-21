@@ -3,6 +3,7 @@ import { Inter, Playfair_Display } from "next/font/google";
 import "./globals.css";
 import { openingScript } from "@/lib/opening";
 import { earlyInstallScript } from "@/lib/install-early";
+import { platformScript } from "@/lib/platform";
 import { WelcomeToast } from "@/components/WelcomeToast";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
@@ -20,9 +21,10 @@ export const viewport: Viewport = { viewportFit: "cover", themeColor: "#faf8f3" 
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    // suppressHydrationWarning: the opening animation's script marks <html> before React loads.
+    // suppressHydrationWarning: the opening animation's and platform scripts mark <html> before React loads.
     <html lang="en" className={`${inter.variable} ${playfair.variable}`} suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: platformScript }} />
         <script dangerouslySetInnerHTML={{ __html: openingScript }} />
         <script dangerouslySetInnerHTML={{ __html: earlyInstallScript }} />
       </head>

@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+/* Phone designs per platform: <html data-os> is set by lib/platform before the page paints. */
+@custom-variant ios (&:where([data-os="ios"] *));
+@custom-variant android (&:where([data-os="android"] *));
+
 @theme inline {
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-display: var(--font-playfair), Georgia, serif;
@@ -33,6 +37,12 @@ body {
   background: var(--color-cream);
   color: var(--color-ink);
   -webkit-font-smoothing: antialiased;
+}
+
+/* On phones, body text uses the phone's own font: San Francisco on iPhones, Roboto on Android. Headings keep Playfair. */
+@media (max-width: 767px) {
+  html[data-os="ios"] { --font-inter: -apple-system, "SF Pro Text", system-ui; }
+  html[data-os="android"] { --font-inter: Roboto, system-ui; }
 }
 
 ::selection {

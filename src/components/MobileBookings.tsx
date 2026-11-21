@@ -13,8 +13,12 @@ export function MobileBookings({ upcoming, past, tab }: { upcoming: Booking[]; p
   const list = tab === "past" ? past : later;
   return (
     <div className="px-4 pt-5 pb-6 md:hidden">
-      <h1 className="font-display text-[1.75rem] font-bold">My bookings</h1>
-      <div role="tablist" className="mt-4 flex gap-1 rounded-xl bg-sand p-1">
+      <h1 className="font-display text-[1.75rem] font-bold android:font-sans android:font-normal ios:font-sans ios:text-[2.125rem] ios:tracking-tight">My bookings</h1>
+      {/* Android: underlined tabs. iPhone: a segmented control. */}
+      <div
+        role="tablist"
+        className="mt-4 flex gap-1 rounded-xl bg-sand p-1 android:-mx-4 android:gap-0 android:rounded-none android:border-b android:border-black/10 android:bg-transparent android:p-0 ios:rounded-[9px] ios:bg-[rgba(118,118,128,.12)] ios:p-0.5"
+      >
         {(["upcoming", "past"] as const).map((t) => (
           <Link
             key={t}
@@ -23,7 +27,11 @@ export function MobileBookings({ upcoming, past, tab }: { upcoming: Booking[]; p
             aria-selected={tab === t}
             replace
             scroll={false}
-            className={`flex-1 rounded-lg py-2 text-center text-sm font-semibold ${tab === t ? "bg-white text-ink shadow-sm" : "text-muted"}`}
+            className={`relative flex-1 rounded-lg py-2 text-center text-sm font-semibold android:rounded-none android:py-3.5 android:font-medium ios:rounded-[7px] ios:py-1.5 ios:text-[13px] ${
+              tab === t
+                ? "bg-white text-ink shadow-sm android:bg-transparent android:text-brand-600 android:shadow-none android:after:absolute android:after:inset-x-[30%] android:after:-bottom-px android:after:h-[3px] android:after:rounded-t-full android:after:bg-brand-600"
+                : "text-muted"
+            }`}
           >
             {t === "past" ? `Past (${past.length})` : `Upcoming (${upcoming.length})`}
           </Link>
