@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Download, X } from "lucide-react";
+import { Download, Loader2, X } from "lucide-react";
 import { LogoMark } from "./Logo";
 import { install, useInstall } from "@/lib/install";
 
@@ -9,8 +9,8 @@ import { install, useInstall } from "@/lib/install";
  * "Get the app" on phones. CheckInn has no Play Store app; instead the site installs itself to the home screen
  * (manifest.ts, public/sw.js) and opens full screen from its own icon.
  *
- * Install always runs the browser's own install, straight from the page, so every option here shows only while the
- * browser offers one (lib/install):
+ * Install always runs the browser's own install, straight from the page, with no how-to steps (lib/install). The
+ * options show on Android phones, and on any phone whose browser offers its install:
  * - a card just under the navbar, a few seconds in. Closing it keeps it away for two weeks;
  * - "Install the app" (InstallAppButton) on the phone home screen and the Profile page.
  */
@@ -28,7 +28,7 @@ function dismissedRecently() {
 }
 
 export function InstallApp() {
-  const { prompt, standalone } = useInstall();
+  const { prompt, standalone, android, waiting, notice } = useInstall();
   const [ready, setReady] = useState(false);
   const [closed, setClosed] = useState(true);
 
@@ -48,7 +48,7 @@ export function InstallApp() {
     } catch {}
   }
 
-  const show = ready && !closed && !standalone && Boolean(prompt);
+  const show = ready && !closed && !standalone && (Boolean(prompt) || android);
 
   return (
     <>
@@ -66,12 +66,11 @@ export function InstallApp() {
           </span>
           <button
             type="button"
-            onClick={() => {
-              close();
-              void install();
-            }}
-            className="shrink-0 rounded-full bg-gold-400 px-4 py-2 text-sm font-bold text-brand-900"
+            onClick={() => void install()}
+            disabled={waiting}
+            className="flex shrink-0 items-center gap-1.5 rounded-full bg-gold-400 px-4 py-2 text-sm font-bold text-brand-900"
           >
+            {waiting && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
             Install
           </button>
           <button type="button" onClick={close} aria-label="Not now" className="shrink-0 rounded-full p-1.5 text-white/55 transition-colors hover:text-white">
@@ -79,16 +78,27 @@ export function InstallApp() {
           </button>
         </aside>
       )}
+      {notice && (
+        <p
+          role="status"
+          className="install-card fixed inset-x-4 bottom-[calc(6.5rem+env(safe-area-inset-bottom))] z-80 rounded-2xl bg-brand-900 px-4 py-3 text-center text-sm text-white shadow-xl md:hidden"
+        >
+          {notice}
+        </p>
+      )}
     </>
   );
 }
 
-/** "Install the app": phones only, while the browser offers its install. Pass children to replace the default label. */
+/**
+ * "Install the app": phones only (Android, or wherever the browser offers its install), hidden inside the installed
+ * app. Pass children to replace the default label.
+ */
 export function InstallAppButton({ className = "inline-flex items-center gap-1.5", children }: { className?: string; children?: React.ReactNode }) {
-  const { prompt, standalone } = useInstall();
-  if (!prompt || standalone) return null;
+  const { prompt, standalone, android, waiting } = useInstall();
+  if ((!prompt && !android) || standalone) return null;
   return (
-    <button type="button" onClick={() => void install()} className={`md:hidden ${className}`}>
+    <button type="button" onClick={() => void install()} aria-busy={waiting} className={`md:hidden aria-busy:opacity-70 ${className}`}>
       {children ?? (
         <>
           <Download className="h-3.5 w-3.5" aria-hidden />

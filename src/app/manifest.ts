@@ -19,6 +19,8 @@ export default function manifest(): MetadataRoute.Manifest {
     background_color: "#061f19",
     theme_color: "#061f19",
     categories: ["food", "lifestyle"],
+    // Lets the site ask Chrome whether CheckInn is installed already (lib/install). Not a store app: the site itself.
+    related_applications: [{ platform: "webapp", url: "/manifest.webmanifest" }],
     icons: [
       { src: "/icons/icon-192.png?v=2", sizes: "192x192", type: "image/png", purpose: "any" },
       { src: "/icons/icon-512.png?v=2", sizes: "512x512", type: "image/png", purpose: "any" },

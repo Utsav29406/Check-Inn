@@ -3,9 +3,12 @@
 import { useSyncExternalStore } from "react";
 
 /*
- * Installing CheckInn as an app straight from the browser. Android browsers (Chrome, Edge, Samsung) offer a real install
- * prompt, caught here as beforeinstallprompt. Install buttons show only while there is one: browsers without it
- * (iPhones, or Chrome before it is ready or once the app is installed) get no install option.
+ * Installing CheckInn as an app straight from the browser, with the browser's own install (beforeinstallprompt, which
+ * Android browsers such as Chrome, Edge and Samsung offer). There are no how-to steps: a tap installs directly.
+ *
+ * Chrome offers its install only once the visitor has tapped the page and spent about 30 seconds on the site, so a tap
+ * can come before it is ready. The tap itself counts, so install() then waits a few seconds for the offer and installs
+ * as soon as it arrives. If it still doesn't come, a short note says why (already installed, or try again shortly).
  */
 type PromptEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: "accepted" | "dismissed" }> };
 
@@ -14,9 +17,15 @@ interface InstallState {
   prompt: PromptEvent | null;
   /** Already running as the installed app. */
   standalone: boolean;
+  /** An Android phone: install buttons show there even before the browser's offer arrives. */
+  android: boolean;
+  /** Waiting for the browser's offer after a tap. */
+  waiting: boolean;
+  /** A short note after a tap that couldn't install. */
+  notice: string | null;
 }
 
-const SERVER: InstallState = { prompt: null, standalone: false };
+const SERVER: InstallState = { prompt: null, standalone: false, android: false, waiting: false, notice: null };
 let state = SERVER;
 const listeners = new Set<() => void>();
 const set = (patch: Partial<InstallState>) => {
@@ -28,10 +37,56 @@ const subscribe = (l: () => void) => {
   return () => listeners.delete(l);
 };
 
-/** Runs the browser's own install prompt. */
+/** How long a tap waits for the browser's offer. A browser lets a page open its install only within ~5 s of a tap. */
+const WAIT_MS = 4000;
+let noticeTimer: number | undefined;
+function note(text: string) {
+  window.clearTimeout(noticeTimer);
+  set({ notice: text });
+  noticeTimer = window.setTimeout(() => set({ notice: null }), 6000);
+}
+
+/** The browser's offer, now or within WAIT_MS. */
+function offer(): Promise<PromptEvent | null> {
+  if (state.prompt) return Promise.resolve(state.prompt);
+  return new Promise((resolve) => {
+    const t = window.setTimeout(() => {
+      unsub();
+      resolve(null);
+    }, WAIT_MS);
+    const unsub = subscribe(() => {
+      if (!state.prompt) return;
+      window.clearTimeout(t);
+      unsub();
+      resolve(state.prompt);
+    });
+  });
+}
+
+/** Installed already? Chrome on Android can tell, through the manifest's related_applications. */
+async function installedAlready() {
+  const nav = navigator as Navigator & { getInstalledRelatedApps?: () => Promise<unknown[]> };
+  try {
+    return Boolean(nav.getInstalledRelatedApps && (await nav.getInstalledRelatedApps()).length);
+  } catch {
+    return false;
+  }
+}
+
+/** Installs straight away with the browser's own install. */
 export async function install() {
-  const prompt = state.prompt;
-  if (!prompt) return;
+  if (state.waiting) return;
+  set({ waiting: !state.prompt, notice: null });
+  const prompt = await offer();
+  set({ waiting: false });
+  if (!prompt) {
+    note(
+      (await installedAlready())
+        ? "CheckInn is already installed. Open it from your home screen."
+        : "Your browser is still getting the app ready. Tap again in a few seconds.",
+    );
+    return;
+  }
   await prompt.prompt();
   const { outcome } = await prompt.userChoice;
   // A prompt can be used once; the browser offers a fresh one if it may.
@@ -46,6 +101,7 @@ if (typeof window !== "undefined") {
   state = {
     ...state,
     standalone: window.matchMedia("(display-mode: standalone)").matches || nav.standalone === true,
+    android: /android/i.test(nav.userAgent),
     // Offered before this script loaded: kept by the <head> script (lib/install-early).
     prompt: (window as Window & { __checkinnInstall?: PromptEvent }).__checkinnInstall ?? null,
   };
