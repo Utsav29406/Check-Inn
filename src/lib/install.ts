@@ -3,8 +3,9 @@
 import { useSyncExternalStore } from "react";
 
 /*
- * Installing CheckInn as an app from the browser. Android browsers (Chrome, Edge, Samsung) offer a real install prompt,
- * caught here as beforeinstallprompt; iPhones have none, so they get the "Add to Home Screen" steps instead.
+ * Installing CheckInn as an app straight from the browser. Android browsers (Chrome, Edge, Samsung) offer a real install
+ * prompt, caught here as beforeinstallprompt. Install buttons show only while there is one: browsers without it
+ * (iPhones, or Chrome before it is ready or once the app is installed) get no install option.
  */
 type PromptEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: "accepted" | "dismissed" }> };
 
@@ -13,12 +14,9 @@ interface InstallState {
   prompt: PromptEvent | null;
   /** Already running as the installed app. */
   standalone: boolean;
-  ios: boolean;
-  /** The how-to sheet (iPhone, or a browser without a prompt). */
-  sheetOpen: boolean;
 }
 
-const SERVER: InstallState = { prompt: null, standalone: false, ios: false, sheetOpen: false };
+const SERVER: InstallState = { prompt: null, standalone: false };
 let state = SERVER;
 const listeners = new Set<() => void>();
 const set = (patch: Partial<InstallState>) => {
@@ -30,12 +28,10 @@ const subscribe = (l: () => void) => {
   return () => listeners.delete(l);
 };
 
-export const setInstallSheet = (open: boolean) => set({ sheetOpen: open });
-
-/** Runs the browser's install prompt if there is one, else opens the how-to sheet. */
+/** Runs the browser's own install prompt. */
 export async function install() {
   const prompt = state.prompt;
-  if (!prompt) return set({ sheetOpen: true });
+  if (!prompt) return;
   await prompt.prompt();
   const { outcome } = await prompt.userChoice;
   // A prompt can be used once; the browser offers a fresh one if it may.
@@ -50,7 +46,6 @@ if (typeof window !== "undefined") {
   state = {
     ...state,
     standalone: window.matchMedia("(display-mode: standalone)").matches || nav.standalone === true,
-    ios: /iphone|ipad|ipod/i.test(nav.userAgent) || (nav.platform === "MacIntel" && nav.maxTouchPoints > 1),
     // Offered before this script loaded: kept by the <head> script (lib/install-early).
     prompt: (window as Window & { __checkinnInstall?: PromptEvent }).__checkinnInstall ?? null,
   };

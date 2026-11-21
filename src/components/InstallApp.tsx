@@ -1,19 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Download, EllipsisVertical, PlusSquare, Share, X } from "lucide-react";
+import { Download, X } from "lucide-react";
 import { LogoMark } from "./Logo";
-import { install, setInstallSheet, useInstall } from "@/lib/install";
+import { install, useInstall } from "@/lib/install";
 
 /*
  * "Get the app" on phones. CheckInn has no Play Store app; instead the site installs itself to the home screen
  * (manifest.ts, public/sw.js) and opens full screen from its own icon.
  *
- * - A card just under the navbar offers it once, a few seconds in, where the browser can install or the phone is an
- *   iPhone. Closing it keeps it away for two weeks.
- * - "Install the app" (InstallAppButton) is there any time: on the phone home screen, the Profile page and the
- *   desktop footer.
- * - iPhones, and browsers with no install prompt, get a sheet with the steps.
+ * Install always runs the browser's own install, straight from the page, so every option here shows only while the
+ * browser offers one (lib/install):
+ * - a card just under the navbar, a few seconds in. Closing it keeps it away for two weeks;
+ * - "Install the app" (InstallAppButton) on the phone home screen and the Profile page.
  */
 
 const DISMISS_KEY = "checkinn-install-dismissed";
@@ -29,7 +28,7 @@ function dismissedRecently() {
 }
 
 export function InstallApp() {
-  const { prompt, standalone, ios } = useInstall();
+  const { prompt, standalone } = useInstall();
   const [ready, setReady] = useState(false);
   const [closed, setClosed] = useState(true);
 
@@ -49,11 +48,7 @@ export function InstallApp() {
     } catch {}
   }
 
-  // Android shows the card even before Chrome offers its prompt (Chrome waits for some use of the site first, and
-  // other browsers never offer one): Install then opens the steps instead.
-  const [android, setAndroid] = useState(false);
-  useEffect(() => setAndroid(/android/i.test(navigator.userAgent)), []);
-  const show = ready && !closed && !standalone && (Boolean(prompt) || ios || android);
+  const show = ready && !closed && !standalone && Boolean(prompt);
 
   return (
     <>
@@ -84,17 +79,14 @@ export function InstallApp() {
           </button>
         </aside>
       )}
-      <InstallSheet />
     </>
   );
 }
 
-/** "Install the app": phones only, hidden inside the installed app. Pass children to replace the default label. */
+/** "Install the app": phones only, while the browser offers its install. Pass children to replace the default label. */
 export function InstallAppButton({ className = "inline-flex items-center gap-1.5", children }: { className?: string; children?: React.ReactNode }) {
-  const { standalone } = useInstall();
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-  if (!mounted || standalone) return null;
+  const { prompt, standalone } = useInstall();
+  if (!prompt || standalone) return null;
   return (
     <button type="button" onClick={() => void install()} className={`md:hidden ${className}`}>
       {children ?? (
@@ -104,62 +96,5 @@ export function InstallAppButton({ className = "inline-flex items-center gap-1.5
         </>
       )}
     </button>
-  );
-}
-
-/** The steps, for phones where the browser has no install prompt to show. */
-function InstallSheet() {
-  const { sheetOpen, ios } = useInstall();
-
-  useEffect(() => {
-    if (!sheetOpen) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setInstallSheet(false);
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [sheetOpen]);
-
-  if (!sheetOpen) return null;
-  const steps = ios
-    ? [
-        { icon: Share, text: <>Tap <b>Share</b> in Safari&apos;s toolbar</> },
-        { icon: PlusSquare, text: <>Choose <b>Add to Home Screen</b></> },
-        { icon: Download, text: <>Tap <b>Add</b>. CheckInn appears with your apps</> },
-      ]
-    : [
-        { icon: EllipsisVertical, text: <>Open your browser&apos;s <b>menu</b> (⋮)</> },
-        { icon: Download, text: <>Tap <b>Install app</b> or <b>Add to Home screen</b></> },
-        { icon: PlusSquare, text: <>Confirm. CheckInn appears with your apps</> },
-      ];
-
-  return (
-    <div className="fixed inset-0 z-80 flex items-end justify-center print:hidden" role="dialog" aria-modal="true" aria-labelledby="checkinn-install-title">
-      <button type="button" aria-label="Close" onClick={() => setInstallSheet(false)} className="cpay-backdrop absolute inset-0 bg-brand-900/60" />
-      <div className="install-sheet relative w-full max-w-md rounded-t-[24px] bg-cream px-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-5 shadow-2xl">
-        <div className="flex items-center gap-3">
-          <span className="grid h-12 w-12 place-items-center rounded-[13px] bg-brand-900">
-            <LogoMark className="h-9 w-9" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <h2 id="checkinn-install-title" className="font-display text-xl font-bold leading-tight">
-              Install CheckInn
-            </h2>
-            <p className="text-xs text-muted">Free, takes a few seconds, no Play Store needed.</p>
-          </div>
-          <button type="button" onClick={() => setInstallSheet(false)} aria-label="Close" className="rounded-full p-2 text-muted hover:bg-sand">
-            <X className="h-5 w-5" aria-hidden />
-          </button>
-        </div>
-        <ol className="mt-5 grid gap-2.5">
-          {steps.map(({ icon: Icon, text }, i) => (
-            <li key={i} className="flex items-center gap-3 rounded-2xl bg-white px-3.5 py-3 text-sm ring-1 ring-black/5">
-              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand-50 text-brand-600">
-                <Icon className="h-4 w-4" aria-hidden />
-              </span>
-              <span className="text-ink/85">{text}</span>
-            </li>
-          ))}
-        </ol>
-      </div>
-    </div>
   );
 }

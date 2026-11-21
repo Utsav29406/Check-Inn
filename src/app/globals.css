@@ -279,6 +279,4 @@ html[data-opening="on"] body { animation: opening-ground 1.45s steps(1, end) bot
 
 /* ---------- Install the app (phones) ---------- */
 .install-card { animation: install-drop 0.35s ease-out both; }
-.install-sheet { animation: install-up 0.3s ease-out both; }
 @keyframes install-drop { from { opacity: 0; transform: translateY(-16px); } }
-@keyframes install-up { from { transform: translateY(100%); } }
