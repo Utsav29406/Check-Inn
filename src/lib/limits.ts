@@ -38,6 +38,22 @@ export async function clearAttempts(kind: string, key: string) {
   await query("DELETE FROM attempts WHERE kind = $1 AND key = $2", [kind, key.slice(0, 200)]);
 }
 
+/**
+ * Takes back the latest attempt of this kind for this key: a sign-in that turned out right shouldn't count towards
+ * the connection's limit (many phones share one mobile-network IP). Only that one, so a correct sign-in to one's own
+ * account can't wipe out the wrong guesses made at other accounts.
+ */
+export async function forgetLatestAttempt(kind: string, key: string) {
+  await query("DELETE FROM attempts WHERE id = (SELECT max(id) FROM attempts WHERE kind = $1 AND key = $2)", [kind, key.slice(0, 200)]);
+}
+
+/** True at most once a day per key: for alert emails that wrong guesses could otherwise set off again and again. */
+export async function onceADay(kind: string, key: string) {
+  if ((await recentAttempts(kind, key, 24 * 60)) > 0) return false;
+  await recordAttempt(kind, key);
+  return true;
+}
+
 /** Sign-in failures allowed per email (and per connection) before a 15-minute lockout. */
 export const LOGIN_LIMIT = { perEmail: 5, perIp: 20, minutes: 15 };
 /** Bookings allowed per connection per hour, upcoming tables per phone number, and bookings per email per day. */

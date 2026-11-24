@@ -2,7 +2,7 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/admin";
 import { query } from "@/lib/db";
 import { inr } from "@/lib/constants";
-import { fmtDate, fmtTime, nowInIndia } from "@/lib/time";
+import { fmtDate, fmtTime, isRealDate, nowInIndia } from "@/lib/time";
 import { Card, PageHeader, PaymentBadge, StatusBadge, smallBtn } from "@/components/admin/ui";
 import { ConfirmButton } from "@/components/admin/ConfirmButton";
 import { ReminderButton } from "@/components/admin/ReminderButton";
@@ -28,7 +28,7 @@ export default async function AdminBookings({ searchParams }: { searchParams: Pr
   const where: string[] = ["b.status <> 'pending'"];
   const params: unknown[] = [];
   const p = (v: unknown) => `$${params.push(v)}`;
-  if (when === "date" && /^\d{4}-\d{2}-\d{2}$/.test(sp.date!)) where.push(`b.booking_date = ${p(sp.date)}`);
+  if (when === "date" && isRealDate(sp.date ?? "")) where.push(`b.booking_date = ${p(sp.date)}`);
   if (when === "upcoming") where.push(`b.booking_date >= ${p(today)}`);
   if (when === "today") where.push(`b.booking_date = ${p(today)}`);
   if (when === "past") where.push(`b.booking_date < ${p(today)}`);

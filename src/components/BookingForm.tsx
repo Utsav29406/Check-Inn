@@ -123,9 +123,11 @@ export function BookingForm({ restaurant, slots, dates, memberExtra, user, coupo
         qr={upi.qr}
         pay={(body) => payBooking(upi.code, body)}
         success="Your table is confirmed!"
-        onDone={(paid) => {
+        onDone={async (paid) => {
           if (paid) return router.push(`/bookings/${upi.code}`);
-          releaseBooking(upi.code);
+          // If the payment went through but its reply was lost on the way, the table is booked: show it.
+          const { confirmed } = await releaseBooking(upi.code).catch(() => ({ confirmed: false }));
+          if (confirmed) return router.push(`/bookings/${upi.code}`);
           setUpi(null);
           setPayError("Payment cancelled, so your table isn't booked yet. Try again, or choose to pay at the restaurant.");
         }}

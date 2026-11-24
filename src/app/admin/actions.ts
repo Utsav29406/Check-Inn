@@ -9,10 +9,10 @@ import { db, query, transaction } from "@/lib/db";
 import { adminCount, createAdminSession, destroyAdminSession, requireAdmin } from "@/lib/admin";
 import { buildSlots, getRestaurant } from "@/lib/restaurants";
 import { CITIES } from "@/lib/constants";
-import { nowInIndia } from "@/lib/time";
+import { isRealDate, nowInIndia } from "@/lib/time";
 import { emailEnabled, sendBookingReminder, sendCancellationEmails, sendListingDecision, sendLockoutAlert, sendMembershipDecision, sendSignInAlert, sendTestConfirmation } from "@/lib/email";
 import { awardScratchCard } from "@/lib/offers";
-import { LOGIN_LIMIT, clearAttempts, clientIp, recentAttempts, recordAttempt, requestSummary } from "@/lib/limits";
+import { LOGIN_LIMIT, clearAttempts, clientIp, forgetLatestAttempt, onceADay, recentAttempts, recordAttempt, requestSummary } from "@/lib/limits";
 import type { FormState } from "@/app/actions";
 import type { Listing, Restaurant } from "@/lib/types";
 import { feeForPrice, parseLocation, savePhoto } from "@/lib/images";
@@ -22,7 +22,7 @@ import { PREVIEW_COOKIE } from "@/lib/festival";
 
 const str = (fd: FormData, key: string) => String(fd.get(key) ?? "").trim();
 const isEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
-const isDate = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s);
+const isDate = isRealDate;
 const isTime = (s: string) => /^\d{2}:\d{2}$/.test(s);
 /** Admin changes show up on the customer site too. */
 const refresh = () => revalidatePath("/", "layout");
@@ -40,13 +40,13 @@ export async function adminLogin(_: FormState, fd: FormData): Promise<FormState>
   }
   const [admin] = await query<{ id: number; name: string; password_hash: string }>("SELECT id, name, password_hash FROM admins WHERE email = $1", [email]);
   if (!admin || !(await bcrypt.compare(str(fd, "password"), admin.password_hash))) {
-    if (admin && (await recentAttempts("admin-login", email, minutes)) === perEmail) {
+    if (admin && (await recentAttempts("admin-login", email, minutes)) === perEmail && (await onceADay("lockout-alert", `admin:${email}`))) {
       const req = await requestSummary();
       after(() => sendLockoutAlert({ to: email, name: admin.name, admin: true, minutes, ...req }));
     }
     return { error: "Incorrect email or password." };
   }
-  await clearAttempts("admin-login", email);
+  await Promise.all([clearAttempts("admin-login", email), forgetLatestAttempt("admin-login-ip", ip)]);
   await createAdminSession(admin.id);
   await setWelcome("admin", admin.name);
   const req = await requestSummary();

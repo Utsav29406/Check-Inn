@@ -12,13 +12,13 @@ import { HOLDS_SEAT, PAYMENT_HOLD_MINUTES, buildSlots } from "@/lib/restaurants"
 import { upiDemo, upiEnabled, upiId, upiLink } from "@/lib/payments";
 import { TEST, UPI_APPS, upiPayLink, cardBrand, cardDeclined, cardProblem, digits, upiDeclined, upiValid } from "@/lib/checkinnpay";
 import { sendBookingConfirmation, sendCancellationEmails, sendListingReceived, sendLockoutAlert, sendMembershipDecision, sendMembershipPaymentReceived, sendSignInAlert } from "@/lib/email";
-import { BOOKING_LIMIT, LOGIN_LIMIT, clearAttempts, clientIp, recentAttempts, recordAttempt, requestSummary } from "@/lib/limits";
+import { BOOKING_LIMIT, LOGIN_LIMIT, clearAttempts, clientIp, forgetLatestAttempt, onceADay, recentAttempts, recordAttempt, requestSummary } from "@/lib/limits";
 import { CITIES, PLANS, memberExtraDiscount } from "@/lib/constants";
 import { parseLocation, savePhoto } from "@/lib/images";
 import { findOrCreateGoogleUser, googleConfig, verifyGoogleCredential } from "@/lib/google";
 import { awardScratchCard, bestCoupon, scratchCard } from "@/lib/offers";
 import { getFestival, offerFestival } from "@/lib/festival";
-import { addDays, nowInIndia } from "@/lib/time";
+import { addDays, isRealDate, nowInIndia } from "@/lib/time";
 import type { Coupon, Restaurant, ScratchReveal } from "@/lib/types";
 
 /** What the booking form needs to show our own UPI QR. */
@@ -81,13 +81,13 @@ export async function login(_: FormState, fd: FormData): Promise<FormState> {
   );
   // One message for every failure, so the form doesn't reveal which emails have accounts.
   if (!user?.password_hash || !(await bcrypt.compare(password, user.password_hash))) {
-    if (user && (await recentAttempts("login", email, minutes)) === perEmail) {
+    if (user && (await recentAttempts("login", email, minutes)) === perEmail && (await onceADay("lockout-alert", email))) {
       const req = await requestSummary();
       after(() => sendLockoutAlert({ to: email, name: user.name, minutes, ...req }));
     }
     return { error: "Incorrect email or password. If you signed up with Google, use Continue with Google." };
   }
-  await clearAttempts("login", email);
+  await Promise.all([clearAttempts("login", email), forgetLatestAttempt("login-ip", ip)]);
   await createSession(user.id);
   await setWelcome("signin", user.name);
   const req = await requestSummary();
@@ -153,9 +153,7 @@ export async function createBooking(_: FormState, fd: FormData): Promise<FormSta
   if (email && !isEmail(email)) return { error: "Please enter a valid email address." };
 
   const now = nowInIndia();
-  // A real date round-trips through addDays unchanged, so impossible ones like 2026-02-31 are caught too.
-  const realDate = /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(Date.parse(`${date}T00:00:00Z`)) && addDays(date, 0) === date;
-  if (!realDate || date < now.date || date > addDays(now.date, 30)) {
+  if (!isRealDate(date) || date < now.date || date > addDays(now.date, 30)) {
     return { error: "Please choose a date within the next 30 days." };
   }
 
@@ -167,7 +165,7 @@ export async function createBooking(_: FormState, fd: FormData): Promise<FormSta
   }
   const [{ upcoming }] = await query<{ upcoming: number }>(
     `SELECT count(*)::int AS upcoming FROM bookings
-     WHERE right(regexp_replace(guest_phone, '\\D', '', 'g'), 10) = $1 AND status IN ('confirmed', 'pending') AND booking_date >= $2`,
+     WHERE right(regexp_replace(guest_phone, '\\D', '', 'g'), 10) = $1 AND booking_date >= $2 AND ${HOLDS_SEAT}`,
     [phone.replace(/\D/g, "").slice(-10), now.date],
   );
   if (upcoming >= upcomingPerPhone) {
@@ -175,7 +173,8 @@ export async function createBooking(_: FormState, fd: FormData): Promise<FormSta
   }
   if (email) {
     const [{ today }] = await query<{ today: number }>(
-      "SELECT count(*)::int AS today FROM bookings WHERE lower(guest_email) = lower($1) AND created_at > now() - interval '1 day'",
+      `SELECT count(*)::int AS today FROM bookings WHERE lower(guest_email) = lower($1) AND created_at > now() - interval '1 day'
+         AND (payment_status <> 'pending' OR ${HOLDS_SEAT})`,
       [email],
     );
     if (today >= perEmailDay) return { error: "This email address has been used for too many bookings today. Please try again tomorrow." };
@@ -336,7 +335,9 @@ export async function payBooking(code: string, body: CheckInnPayBody): Promise<{
     const {
       rows: [b],
     } = await client.query<{ status: string; payment_status: string; held: boolean }>(
-      `SELECT status, payment_status, created_at > now() - interval '${PAYMENT_HOLD_MINUTES} minutes' AS held FROM bookings WHERE code = $1 FOR UPDATE`,
+      // 30 seconds inside the seat hold (lib/restaurants), so a payment right at the end can't land after someone else
+      // has been given the same seats.
+      `SELECT status, payment_status, created_at > now() - interval '${PAYMENT_HOLD_MINUTES} minutes' + interval '30 seconds' AS held FROM bookings WHERE code = $1 FOR UPDATE`,
       [code],
     );
     if (!b || b.status !== "pending" || b.payment_status !== "pending") return "gone";
@@ -357,8 +358,16 @@ export async function payBooking(code: string, body: CheckInnPayBody): Promise<{
 }
 
 /** The guest closed the UPI QR without paying: free the seats straight away. */
-export async function releaseBooking(code: string) {
-  await query("UPDATE bookings SET status = 'cancelled' WHERE code = $1 AND status = 'pending' AND payment_status = 'pending'", [code]);
+export async function releaseBooking(code: string): Promise<{ confirmed: boolean }> {
+  const released = await query("UPDATE bookings SET status = 'cancelled' WHERE code = $1 AND status = 'pending' AND payment_status = 'pending' RETURNING code", [code]);
+  // An unpaid try isn't a table, so it gives back its place in the connection's hourly booking limit.
+  if (released.length) {
+    await forgetLatestAttempt("booking-ip", await clientIp());
+    return { confirmed: false };
+  }
+  // Not released: the payment may have gone through although its reply never reached the phone.
+  const [b] = await query<{ status: string }>("SELECT status FROM bookings WHERE code = $1", [code]);
+  return { confirmed: b?.status === "confirmed" };
 }
 
 /** The booking's owner, or anyone with the signed link from the confirmation email, can cancel an upcoming table. */
@@ -489,11 +498,23 @@ export async function payMembership(id: number, body: CheckInnPayBody): Promise<
   const paid = await transaction(async (client) => {
     const {
       rows: [p],
-    } = await client.query<{ tier: string }>(
-      "UPDATE membership_payments SET status = 'verified', ref = $3, reviewed_at = now() WHERE id = $1 AND user_id = $2 AND status = 'pending' RETURNING tier",
-      [id, user.id, ref],
-    );
+    } = await client.query<{ tier: string }>("SELECT tier FROM membership_payments WHERE id = $1 AND user_id = $2 AND status = 'pending' FOR UPDATE", [id, user.id]);
     if (!p) return false;
+    // A checkout left open in another tab must not swap a better plan, bought since, for this one.
+    const {
+      rows: [u],
+    } = await client.query<{ membership_tier: string; membership_expires: string | null }>(
+      "SELECT membership_tier, to_char(membership_expires, 'YYYY-MM-DD') AS membership_expires FROM users WHERE id = $1 FOR UPDATE",
+      [user.id],
+    );
+    const rank = (tier: string) => PLANS.findIndex((x) => x.tier === tier);
+    if (rank(p.tier) < rank(activeTier(u))) {
+      await client.query("UPDATE membership_payments SET status = 'rejected', reviewed_at = now() WHERE id = $1", [id]);
+      return "lower";
+    }
+    await client.query("UPDATE membership_payments SET status = 'verified', ref = $2, reviewed_at = now() WHERE id = $1", [id, ref]);
+    // Any other unfinished checkout of theirs is now out of date.
+    await client.query("UPDATE membership_payments SET status = 'rejected', reviewed_at = now() WHERE user_id = $1 AND status = 'pending' AND id <> $2", [user.id, id]);
     // Same rule as an admin verifying a UPI payment: a year from today, or a year added to the same plan's time left.
     await client.query(
       `UPDATE users SET membership_tier = $2::varchar,
@@ -503,6 +524,7 @@ export async function payMembership(id: number, body: CheckInnPayBody): Promise<
     );
     return true;
   });
+  if (paid === "lower") return { paid: false, error: "You're already on a higher plan, so nothing was charged. Reload the page to see it." };
   if (!paid) return { paid: false, error: "This payment was already made or closed. Reload the page." };
   after(() => sendMembershipDecision(id));
   // No revalidatePath here: refreshing now would swap the Join button (and this window) for "Your current plan" before

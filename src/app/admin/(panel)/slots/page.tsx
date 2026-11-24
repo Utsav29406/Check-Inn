@@ -2,7 +2,7 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/admin";
 import { query } from "@/lib/db";
 import { HOLDS_SEAT, buildSlots, getBlockedSlots } from "@/lib/restaurants";
-import { addDays, fmtDate, fmtTime, nowInIndia } from "@/lib/time";
+import { addDays, fmtDate, fmtTime, isRealDate, nowInIndia } from "@/lib/time";
 import { Card, PageHeader, PaymentBadge } from "@/components/admin/ui";
 import { ConfirmButton } from "@/components/admin/ConfirmButton";
 import { field } from "@/components/admin/ActionForm";
@@ -16,7 +16,7 @@ export default async function AdminSlots({ searchParams }: { searchParams: Promi
   await requireAdmin();
   const sp = await searchParams;
   const now = nowInIndia();
-  const date = /^\d{4}-\d{2}-\d{2}$/.test(sp.date ?? "") ? sp.date! : now.date;
+  const date = isRealDate(sp.date ?? "") ? sp.date! : now.date;
 
   const restaurants = await query<Restaurant>("SELECT * FROM restaurants ORDER BY city = 'Ahmedabad' DESC, city, name");
   const r = restaurants.find((x) => x.id === Number(sp.restaurant)) ?? restaurants[0];

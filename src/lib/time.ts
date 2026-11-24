@@ -25,6 +25,11 @@ export function nowInIndia() {
   return { date: `${get("year")}-${get("month")}-${get("day")}`, minutes: Number(get("hour")) * 60 + Number(get("minute")) };
 }
 
+/** A real calendar date as YYYY-MM-DD. It round-trips through addDays unchanged, so 2026-02-31 is refused too. */
+export function isRealDate(date: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(Date.parse(`${date}T00:00:00Z`)) && addDays(date, 0) === date;
+}
+
 export function addDays(date: string, n: number) {
   const d = new Date(`${date}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + n);
